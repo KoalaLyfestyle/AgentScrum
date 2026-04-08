@@ -1,0 +1,30 @@
+# Agent-facing / internal workflow
+ORION.md
+CLAUDE.md
+.issues.yaml
+DoD.md
+TASKBRIEF.md
+STATUS.md
+
+# Secrets — never commit
+.env
+.env.*
+!.env.schema
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.svelte-kit/
+
+# Runtime
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
