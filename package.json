@@ -4,7 +4,7 @@
   "description": "Scrum management for agent swarms — MCP-native sprint state",
   "type": "module",
   "bin": {
-    "scrum": "./dist/cli/index.js"
+    "scrum": "./bin/scrum"
   },
   "scripts": {
     "build": "tsc",

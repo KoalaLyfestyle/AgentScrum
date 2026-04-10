@@ -25,23 +25,38 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 ## Quick Start
 
 ```bash
-# Install
+# 1. Clone and install
+git clone https://github.com/KoalaLyfestyle/AgentScrum.git
+cd AgentScrum
 npm install
 
-# Run DB migrations
+# 2. Apply DB migrations
 npm run db:migrate
 
-# Bootstrap a project via CLI (interactive DoD prompt)
-npm run dev -- init myproject
+# 3. Link the CLI globally (one-time setup)
+npm link
 
-# Register MCP server with Claude Code
-claude mcp add agentscrum \
-  -e SCRUM_DB_PATH=/path/to/agentscrum.db \
-  -e SCRUM_PROJECT_ID=1 \
-  -- /path/to/node_modules/.bin/tsx /path/to/src/mcp/server.ts
+# 4. Verify
+scrum --version          # 0.1.0
+scrum help               # full command reference
 ```
 
-Once registered, all 21 MCP tools are available natively in Claude Code sessions.
+> **No build step required.** The `scrum` command runs TypeScript directly via `tsx`.
+> If you don't want to use `npm link`, every command also works as `npx tsx src/cli/index.ts <args>`.
+
+```bash
+# 5. Create your first project (interactive DoD prompt)
+export SCRUM_DB_PATH=/path/to/your/agentscrum.db
+scrum init myproject
+
+# 6. Register the MCP server with Claude Code
+claude mcp add agentscrum \
+  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
+  -e SCRUM_PROJECT_ID=1 \
+  -- node_modules/.bin/tsx /absolute/path/to/src/mcp/server.ts
+```
+
+Once registered, all 21 MCP tools are available in every Claude Code session.
 
 ## Agent Usage Pattern
 
@@ -107,22 +122,36 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 ## CLI Commands
 
 ```bash
-scrum init <project>                            # create project + Sprint 1 (interactive DoD prompt)
+scrum help                        # top-level help with examples
+scrum help <command>              # help for a specific command (e.g. scrum help issue)
+
+scrum init <project>              # create project + Sprint 1 (interactive DoD prompt)
+
+scrum status                      # sprint summary
+scrum status --json               # machine-readable JSON (for agent use)
+
 scrum epic add <project-id> <title>
+
 scrum issue add <epic-id> <title> \
-  [--type feature] [--priority high] \
+  [--type feature|bugfix|refactor|test|docs] \
+  [--priority high|medium|low] \
   [--description "requirements body"] \
   [--points 3]
-scrum issue list [--full] [--json]             # --full shows ACs, --json outputs structured JSON
-scrum issue status <id> <status>
-scrum issue show <id>
-scrum issue ac <id> <text>
-scrum status [--json]
-scrum dod list
-scrum dod add "<step>"
-scrum dod remove <id>
+scrum issue list                  # all issues in current sprint
+scrum issue list --full           # with ACs and description inline
+scrum issue list --json           # full JSON (for agent use)
+scrum issue status <id> <status>  # todo|in_progress|review|done|blocked
+scrum issue show <id>             # full detail: ACs, sessions, tokens
+scrum issue ac <id> <text>        # add an acceptance criterion
+
+scrum dod list                    # show project Definition of Done
+scrum dod add "<step>"            # append a DoD item
+scrum dod remove <id>             # remove a DoD item
+
 scrum log <issue-id> <summary> [--tokens N] [--auditor pass|fail|skipped]
 ```
+
+All commands that read data require `SCRUM_PROJECT_ID` to be set (or pass the project ID explicitly where prompted).
 
 ## Story Points
 
