@@ -1,3 +1,0 @@
-#!/usr/bin/env sh
-# Runs the AgentScrum CLI via tsx — no build step required.
-exec "$(dirname "$0")/../node_modules/.bin/tsx" "$(dirname "$0")/../src/cli/index.ts" "$@"
