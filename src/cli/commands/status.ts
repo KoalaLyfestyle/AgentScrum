@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { getActiveSprint, getSprintSummary } from "../../services/scrum.js";
+import { getActiveSprint, getSprintSummary, listDod } from "../../services/scrum.js";
 
 function projectId(): number {
   const raw = process.env["SCRUM_PROJECT_ID"];
@@ -14,10 +14,18 @@ export function registerStatus(program: Command): void {
   program
     .command("status")
     .description("Print current sprint summary")
-    .action(() => {
+    .option("--json", "Output as JSON (structured, machine-readable)")
+    .action((opts: { json?: boolean }) => {
       try {
-        const sprint = getActiveSprint(projectId());
+        const pid = projectId();
+        const sprint = getActiveSprint(pid);
         const summary = getSprintSummary(sprint.id);
+        const dod = listDod(pid);
+
+        if (opts.json) {
+          console.log(JSON.stringify({ ...summary, dod: dod.map((d) => d.text) }, null, 2));
+          return;
+        }
 
         console.log(`\nSprint ${summary.sprint.number} — ${summary.sprint.status.toUpperCase()}`);
         if (summary.sprint.goal) console.log(`Goal: ${summary.sprint.goal}`);
@@ -33,6 +41,11 @@ export function registerStatus(program: Command): void {
 
         if (summary.activeIssue) {
           console.log(`\nActive: #${summary.activeIssue.id} — ${summary.activeIssue.title}`);
+        }
+
+        if (dod.length > 0) {
+          console.log(`\nDoD (${dod.length} items):`);
+          for (const d of dod) console.log(`  [ ] ${d.text}`);
         }
         console.log();
       } catch (err) {

@@ -42,7 +42,6 @@ const projectId = projectArg ? parseInt(projectArg, 10) : 1;
 
 const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../agentscrum.db");
 const vaultRoot = process.env["OBSIDIAN_VAULT_PATH"] ?? path.join(os.homedir(), "Orion/Claude-Workspace");
-const projectSlug = "agentscrum"; // could be dynamic if multi-project
 
 // ---------------------------------------------------------------------------
 // DB
@@ -81,6 +80,8 @@ if (!project) {
   console.error(`Project ${projectId} not found`);
   process.exit(1);
 }
+
+const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 const sprint = db
   .prepare("SELECT * FROM sprints WHERE project_id = ? AND number = ?")

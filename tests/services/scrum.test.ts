@@ -131,3 +131,89 @@ describe("getActiveSprint fallback", () => {
     expect(found.status).toBe("planning");
   });
 });
+
+describe("estimateIssue", () => {
+  it("sets story points on an issue", () => {
+    const { project, sprint } = scrum.initProject("est-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    const issue = scrum.createIssue(epic.id, sprint.id, "Estimate me");
+    expect(issue.storyPoints).toBeNull();
+
+    const updated = scrum.estimateIssue(issue.id, 5);
+    expect(updated.storyPoints).toBe(5);
+  });
+});
+
+describe("DoD management", () => {
+  it("adds, lists, and removes DoD items", () => {
+    const { project } = scrum.initProject("dod-test");
+
+    const item1 = scrum.addDodItem(project.id, "Run npm test");
+    const item2 = scrum.addDodItem(project.id, "Commit changes");
+    expect(item1.text).toBe("Run npm test");
+    expect(item2.text).toBe("Commit changes");
+
+    const list = scrum.listDod(project.id);
+    expect(list).toHaveLength(2);
+    expect(list[0]!.text).toBe("Run npm test");
+
+    scrum.removeDodItem(item1.id);
+    const listAfter = scrum.listDod(project.id);
+    expect(listAfter).toHaveLength(1);
+    expect(listAfter[0]!.text).toBe("Commit changes");
+  });
+
+  it("setDod replaces entire list", () => {
+    const { project } = scrum.initProject("dod-set-test");
+    scrum.addDodItem(project.id, "Old item");
+
+    scrum.setDod(project.id, ["Run tests", "Commit", "Push"]);
+    const list = scrum.listDod(project.id);
+    expect(list).toHaveLength(3);
+    expect(list.map((d) => d.text)).toEqual(["Run tests", "Commit", "Push"]);
+  });
+});
+
+describe("getWorkPackage", () => {
+  it("returns issues up to capacity with ACs and DoD embedded", () => {
+    const { project, sprint } = scrum.initProject("wp-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id, "Test sprint");
+    scrum.setDod(project.id, ["Run npm test", "Commit"]);
+
+    const i1 = scrum.createIssue(epic.id, sprint.id, "High priority", "feature", "high");
+    scrum.estimateIssue(i1.id, 3);
+    scrum.addAc(i1.id, "AC for high");
+
+    const i2 = scrum.createIssue(epic.id, sprint.id, "Low priority", "feature", "low");
+    scrum.estimateIssue(i2.id, 5);
+
+    // capacity 4 — fits i1 (3pts), skips i2 (5pts)
+    const pkg = scrum.getWorkPackage(project.id, 4);
+    expect(pkg.dod).toEqual(["Run npm test", "Commit"]);
+    expect(pkg.capacityRequested).toBe(4);
+    expect(pkg.capacityUsed).toBe(3);
+    expect(pkg.issues).toHaveLength(1);
+    expect(pkg.issues[0]!.title).toBe("High priority");
+    expect(pkg.issues[0]!.acs).toHaveLength(1);
+    expect(pkg.issues[0]!.acs[0]!.text).toBe("AC for high");
+  });
+
+  it("packs multiple issues greedily by priority", () => {
+    const { project, sprint } = scrum.initProject("wp-pack-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+
+    const i1 = scrum.createIssue(epic.id, sprint.id, "A", "feature", "high");
+    scrum.estimateIssue(i1.id, 2);
+    const i2 = scrum.createIssue(epic.id, sprint.id, "B", "feature", "medium");
+    scrum.estimateIssue(i2.id, 3);
+    const i3 = scrum.createIssue(epic.id, sprint.id, "C", "feature", "low");
+    scrum.estimateIssue(i3.id, 8);
+
+    // capacity 5 — fits A(2) + B(3), not C(8)
+    const pkg = scrum.getWorkPackage(project.id, 5);
+    expect(pkg.issues.map((i) => i.title)).toEqual(["A", "B"]);
+    expect(pkg.capacityUsed).toBe(5);
+  });
+});

@@ -5,6 +5,7 @@ import { registerEpic } from "./commands/epic.js";
 import { registerIssue } from "./commands/issue.js";
 import { registerStatus } from "./commands/status.js";
 import { registerLog } from "./commands/log.js";
+import { registerDod } from "./commands/dod.js";
 
 const program = new Command();
 
@@ -18,5 +19,6 @@ registerEpic(program);
 registerIssue(program);
 registerStatus(program);
 registerLog(program);
+registerDod(program);
 
 program.parse(process.argv);

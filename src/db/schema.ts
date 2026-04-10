@@ -41,6 +41,7 @@ export const issues = sqliteTable("issues", {
     .notNull()
     .references(() => sprints.id),
   title: text("title").notNull(),
+  description: text("description"),
   type: text("type", {
     enum: ["feature", "bugfix", "refactor", "test", "docs"],
   })
@@ -55,6 +56,7 @@ export const issues = sqliteTable("issues", {
     .notNull()
     .default("medium"),
   assignedTo: text("assigned_to"),
+  storyPoints: integer("story_points", { mode: "number" }),
   tokensUsed: real("tokens_used").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
@@ -94,6 +96,18 @@ export const decisions = sqliteTable("decisions", {
   decision: text("decision").notNull(),
   rejectedAlternatives: text("rejected_alternatives"), // plain text or JSON array
   consequences: text("consequences"),
+  createdAt: text("created_at").notNull(),
+});
+
+// Project-level Definition of Done — checklist every agent must complete after each issue
+export const projectDod = sqliteTable("project_dod", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id", { mode: "number" })
+    .notNull()
+    .references(() => projects.id),
+  order: integer("order", { mode: "number" }).notNull().default(0),
+  text: text("text").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull(),
 });
 

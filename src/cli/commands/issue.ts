@@ -7,7 +7,7 @@ import {
   getActiveSprint,
   addAc,
 } from "../../services/scrum.js";
-import type { IssueStatus, IssueType, Priority } from "../../schema/types.js";
+import type { IssueDetail, IssueStatus, IssueType, Priority } from "../../schema/types.js";
 
 const ISSUE_STATUSES: IssueStatus[] = ["todo", "in_progress", "review", "done", "blocked"];
 const ISSUE_TYPES: IssueType[] = ["feature", "bugfix", "refactor", "test", "docs"];
@@ -30,7 +30,9 @@ export function registerIssue(program: Command): void {
     .description("Create a new issue in the current sprint")
     .option("-t, --type <type>", `Issue type (${ISSUE_TYPES.join("|")})`, "feature")
     .option("-p, --priority <priority>", `Priority (${PRIORITIES.join("|")})`, "medium")
-    .action((epicId: string, title: string, opts: { type: string; priority: string }) => {
+    .option("-d, --description <text>", "Requirements body — what to build and why")
+    .option("--points <n>", "Story point estimate (Fibonacci: 1, 2, 3, 5, 8, 13)")
+    .action((epicId: string, title: string, opts: { type: string; priority: string; description?: string; points?: string }) => {
       try {
         const type = opts.type as IssueType;
         const priority = opts.priority as Priority;
@@ -42,10 +44,12 @@ export function registerIssue(program: Command): void {
           console.error(`Invalid priority: ${priority}. Must be one of: ${PRIORITIES.join(", ")}`);
           process.exit(1);
         }
+        const storyPoints = opts.points ? parseInt(opts.points, 10) : undefined;
         const sprint = getActiveSprint(projectId());
-        const created = createIssue(parseInt(epicId, 10), sprint.id, title, type, priority);
+        const created = createIssue(parseInt(epicId, 10), sprint.id, title, type, priority, opts.description, storyPoints);
         console.log(`Issue created: #${created.id} — ${created.title}`);
-        console.log(`  Epic: ${created.epicId} | Sprint: ${created.sprintId} | Type: ${created.type} | Priority: ${created.priority}`);
+        console.log(`  Epic: ${created.epicId} | Sprint: ${created.sprintId} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
+        if (created.description) console.log(`  Description: ${created.description}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
@@ -55,10 +59,19 @@ export function registerIssue(program: Command): void {
   issue
     .command("list")
     .description("List all issues in the current sprint")
-    .action(() => {
+    .option("--full", "Include acceptance criteria and description for each issue")
+    .option("--json", "Output as JSON (structured, machine-readable)")
+    .action((opts: { full?: boolean; json?: boolean }) => {
       try {
         const sprint = getActiveSprint(projectId());
         const issues = listIssues(sprint.id);
+
+        if (opts.json) {
+          const details: IssueDetail[] = issues.map((i) => getIssueDetail(i.id));
+          console.log(JSON.stringify({ sprint, issues: details }, null, 2));
+          return;
+        }
+
         if (issues.length === 0) {
           console.log(`No issues in Sprint ${sprint.number}`);
           return;
@@ -68,7 +81,15 @@ export function registerIssue(program: Command): void {
         for (const i of issues) {
           const status = i.status.padEnd(11);
           const priority = i.priority.padEnd(7);
-          console.log(`  #${String(i.id).padStart(padId)} [${status}] [${priority}] ${i.title}`);
+          const pts = i.storyPoints ? ` [${i.storyPoints}pt]` : "";
+          console.log(`  #${String(i.id).padStart(padId)} [${status}] [${priority}]${pts} ${i.title}`);
+          if (opts.full) {
+            if (i.description) console.log(`         ${i.description}`);
+            const detail = getIssueDetail(i.id);
+            for (const ac of detail.acs) {
+              console.log(`         ${ac.completed ? "[x]" : "[ ]"} ${ac.text}`);
+            }
+          }
         }
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);

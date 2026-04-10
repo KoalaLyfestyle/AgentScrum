@@ -178,6 +178,7 @@ server.registerTool(
       epic_id: z.number().int().describe("Epic ID the issue belongs to"),
       sprint_id: z.number().int().describe("Sprint ID to add the issue to"),
       title: z.string().describe("Issue title"),
+      description: z.string().optional().describe("Requirements body — what to build and why. Include constraints and scope. This is what the builder reads before starting."),
       type: z
         .enum(["feature", "bugfix", "refactor", "test", "docs"])
         .optional()
@@ -188,10 +189,11 @@ server.registerTool(
         .optional()
         .default("medium")
         .describe("Priority"),
+      story_points: z.number().int().min(1).max(13).optional().describe("Complexity estimate (Fibonacci: 1, 2, 3, 5, 8, 13)"),
     },
   },
   (args) =>
-    safe(() => scrum.createIssue(args.epic_id, args.sprint_id, args.title, args.type, args.priority))
+    safe(() => scrum.createIssue(args.epic_id, args.sprint_id, args.title, args.type, args.priority, args.description, args.story_points))
 );
 
 server.registerTool(
@@ -273,6 +275,66 @@ server.registerTool(
       const detail = scrum.getIssueDetail(args.issue_id);
       return { session, issue_tokens_total: detail.tokensUsed };
     })
+);
+
+// ---------------------------------------------------------------------------
+// PLANNING TOOLS — story points + work package
+// ---------------------------------------------------------------------------
+
+server.registerTool(
+  "scrum_estimate_issue",
+  {
+    description:
+      "Set the story point estimate for an issue. Call during sprint planning before the sprint starts. Use Fibonacci: 1 (trivial), 2 (small), 3 (medium), 5 (large), 8 (very large), 13 (epic — consider splitting).",
+    inputSchema: {
+      issue_id: z.number().int().describe("Issue ID"),
+      story_points: z.number().int().min(1).max(13).describe("Fibonacci estimate: 1, 2, 3, 5, 8, or 13"),
+    },
+  },
+  (args) => safe(() => scrum.estimateIssue(args.issue_id, args.story_points))
+);
+
+server.registerTool(
+  "scrum_get_work_package",
+  {
+    description:
+      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. No follow-up reads needed. Also returns the project DoD checklist to complete after each issue.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+      capacity: z.number().int().min(1).describe("Story points available this session"),
+    },
+  },
+  (args) => safe(() => scrum.getWorkPackage(args.project_id, args.capacity))
+);
+
+// ---------------------------------------------------------------------------
+// DOD TOOLS — project-level Definition of Done
+// ---------------------------------------------------------------------------
+
+server.registerTool(
+  "scrum_set_dod",
+  {
+    description:
+      "Replace the entire Definition of Done checklist for a project. Use during project setup or when the DoD changes. Items are ordered as provided. Agents see this list in every work package.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+      items: z.array(z.string()).describe("Ordered list of DoD steps, e.g. ['Run npm test', 'Commit', 'Push']"),
+    },
+  },
+  (args) => safe(() => scrum.setDod(args.project_id, args.items))
+);
+
+server.registerTool(
+  "scrum_add_dod_item",
+  {
+    description: "Append a single item to the project Definition of Done checklist.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+      text: z.string().describe("DoD step text"),
+      order: z.number().int().optional().describe("Position (0-indexed). Appends to end if omitted."),
+    },
+  },
+  (args) => safe(() => scrum.addDodItem(args.project_id, args.text, args.order))
 );
 
 // ---------------------------------------------------------------------------

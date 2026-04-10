@@ -15,6 +15,13 @@
       "when": 1775781566420,
       "tag": "0001_glossy_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775790521994,
+      "tag": "0002_bright_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

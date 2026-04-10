@@ -14,8 +14,10 @@ import type {
   Session,
   Decision,
   Lesson,
+  DodItem,
   IssueDetail,
   SprintSummary,
+  WorkPackage,
   IssueStatus,
   IssueType,
   Priority,
@@ -213,15 +215,39 @@ export function createIssue(
   sprintId: number,
   title: string,
   type: IssueType = "feature",
-  priority: Priority = "medium"
+  priority: Priority = "medium",
+  description?: string,
+  storyPoints?: number
 ): Issue {
   const db = getDb();
   const issue = db
     .insert(schema.issues)
-    .values({ epicId, sprintId, title, type, priority, tokensUsed: 0, createdAt: now() })
+    .values({
+      epicId,
+      sprintId,
+      title,
+      description: description ?? null,
+      type,
+      priority,
+      storyPoints: storyPoints ?? null,
+      tokensUsed: 0,
+      createdAt: now(),
+    })
     .returning()
     .get();
   if (!issue) throw new Error("Failed to create issue");
+  return issue as Issue;
+}
+
+export function estimateIssue(issueId: number, storyPoints: number): Issue {
+  const db = getDb();
+  const issue = db
+    .update(schema.issues)
+    .set({ storyPoints })
+    .where(eq(schema.issues.id, issueId))
+    .returning()
+    .get();
+  if (!issue) throw new Error(`Issue ${issueId} not found`);
   return issue as Issue;
 }
 
@@ -358,6 +384,87 @@ export function logSession(
   }
 
   return session as Session;
+}
+
+// --- Work package ---
+
+const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
+
+export function getWorkPackage(projectId: number, capacity: number): WorkPackage {
+  const sprint = getActiveSprint(projectId);
+  const dod = listDod(projectId);
+
+  const db = getDb();
+  const todoIssues = db
+    .select()
+    .from(schema.issues)
+    .where(and(eq(schema.issues.sprintId, sprint.id), eq(schema.issues.status, "todo")))
+    .all() as Issue[];
+
+  todoIssues.sort((a, b) => {
+    const pa = PRIORITY_ORDER[a.priority as Priority] ?? 1;
+    const pb = PRIORITY_ORDER[b.priority as Priority] ?? 1;
+    if (pa !== pb) return pa - pb;
+    return a.id - b.id;
+  });
+
+  const selected: IssueDetail[] = [];
+  let capacityUsed = 0;
+
+  for (const issue of todoIssues) {
+    const pts = issue.storyPoints ?? 1;
+    if (capacityUsed + pts > capacity) continue;
+    selected.push(getIssueDetail(issue.id));
+    capacityUsed += pts;
+  }
+
+  return {
+    sprint,
+    dod: dod.map((d) => d.text),
+    capacityRequested: capacity,
+    capacityUsed,
+    issues: selected,
+  };
+}
+
+// --- Definition of Done ---
+
+export function addDodItem(projectId: number, text: string, order?: number): DodItem {
+  const db = getDb();
+  const existing = db
+    .select()
+    .from(schema.projectDod)
+    .where(and(eq(schema.projectDod.projectId, projectId), eq(schema.projectDod.active, true)))
+    .all();
+  const nextOrder = order ?? existing.length;
+  const item = db
+    .insert(schema.projectDod)
+    .values({ projectId, text, order: nextOrder, active: true, createdAt: now() })
+    .returning()
+    .get();
+  if (!item) throw new Error("Failed to add DoD item");
+  return item as DodItem;
+}
+
+export function listDod(projectId: number): DodItem[] {
+  const db = getDb();
+  return db
+    .select()
+    .from(schema.projectDod)
+    .where(and(eq(schema.projectDod.projectId, projectId), eq(schema.projectDod.active, true)))
+    .all()
+    .sort((a, b) => (a as DodItem).order - (b as DodItem).order) as DodItem[];
+}
+
+export function removeDodItem(id: number): void {
+  const db = getDb();
+  db.update(schema.projectDod).set({ active: false }).where(eq(schema.projectDod.id, id)).run();
+}
+
+export function setDod(projectId: number, items: string[]): DodItem[] {
+  const db = getDb();
+  db.delete(schema.projectDod).where(eq(schema.projectDod.projectId, projectId)).run();
+  return items.map((text, i) => addDodItem(projectId, text, i));
 }
 
 // --- Knowledge layer ---

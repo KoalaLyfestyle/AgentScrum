@@ -37,10 +37,12 @@ export interface Issue {
   epicId: number;
   sprintId: number;
   title: string;
+  description?: string;
   type: IssueType;
   status: IssueStatus;
   priority: Priority;
   assignedTo?: string; // agent identifier
+  storyPoints?: number;
   tokensUsed: number;
   createdAt: string;
 }
@@ -84,6 +86,15 @@ export interface Lesson {
   createdAt: string;
 }
 
+export interface DodItem {
+  id: number;
+  projectId: number;
+  order: number;
+  text: string;
+  active: boolean;
+  createdAt: string;
+}
+
 // Composite types returned by service layer
 export interface IssueDetail extends Issue {
   acs: AcceptanceCriterion[];
@@ -95,4 +106,12 @@ export interface SprintSummary {
   total: number;
   byStatus: Record<IssueStatus, number>;
   activeIssue?: Issue;
+}
+
+export interface WorkPackage {
+  sprint: Sprint;
+  dod: string[];
+  capacityRequested: number;
+  capacityUsed: number;
+  issues: IssueDetail[];
 }
