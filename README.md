@@ -121,37 +121,49 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 
 ## CLI Commands
 
-```bash
-scrum help                        # top-level help with examples
-scrum help <command>              # help for a specific command (e.g. scrum help issue)
+All commands (except `init`) take the project name or ID as the first argument:
 
-scrum init <project>              # create project + Sprint 1 (interactive DoD prompt)
-
-scrum status                      # sprint summary
-scrum status --json               # machine-readable JSON (for agent use)
-
-scrum epic add <project-id> <title>
-
-scrum issue add <epic-id> <title> \
-  [--type feature|bugfix|refactor|test|docs] \
-  [--priority high|medium|low] \
-  [--description "requirements body"] \
-  [--points 3]
-scrum issue list                  # all issues in current sprint
-scrum issue list --full           # with ACs and description inline
-scrum issue list --json           # full JSON (for agent use)
-scrum issue status <id> <status>  # todo|in_progress|review|done|blocked
-scrum issue show <id>             # full detail: ACs, sessions, tokens
-scrum issue ac <id> <text>        # add an acceptance criterion
-
-scrum dod list                    # show project Definition of Done
-scrum dod add "<step>"            # append a DoD item
-scrum dod remove <id>             # remove a DoD item
-
-scrum log <issue-id> <summary> [--tokens N] [--auditor pass|fail|skipped]
+```
+scrum <project> <command> [args]
 ```
 
-All commands that read data require `SCRUM_PROJECT_ID` to be set (or pass the project ID explicitly where prompted).
+```bash
+scrum help                         # top-level help with examples
+scrum help <command>               # e.g. scrum help issue
+
+# Project setup
+scrum init <project-name>          # create project + Sprint 1 (interactive DoD prompt)
+
+# Sprint state
+scrum <project> status             # sprint summary + DoD checklist
+scrum <project> status --json      # machine-readable JSON
+
+# Epics
+scrum <project> epic add <title>
+
+# Issues
+scrum <project> issue list                      # all issues in current sprint
+scrum <project> issue list --full               # with description + ACs inline
+scrum <project> issue list --json               # full JSON (for agent consumption)
+scrum <project> issue add <epic-id> <title> \
+  [--type feature|bugfix|refactor|test|docs] \
+  [--priority high|medium|low] \
+  [--description "what to build"] \
+  [--points 3]                                  # story point estimate
+scrum <project> issue status <id> <status>      # todo|in_progress|review|done|blocked
+scrum <project> issue show <id>                 # ACs, sessions, token count
+scrum <project> issue ac <id> <text>            # add acceptance criterion
+
+# Definition of Done
+scrum <project> dod list           # show DoD checklist
+scrum <project> dod add "<step>"   # append item
+scrum <project> dod remove <id>    # remove item
+
+# Session logging
+scrum <project> log <issue-id> <summary> [--tokens N] [--auditor pass|fail|skipped]
+```
+
+`<project>` can be the project name (e.g. `myproject`) or numeric ID (e.g. `1`). `SCRUM_PROJECT_ID` still works as a fallback env var (used by the MCP server).
 
 ## Story Points
 
@@ -192,11 +204,20 @@ npx tsx scripts/export-sprint.ts --sprint <N> [--project <id>]
 
 ## Environment Variables
 
+Create a `.env` file in the project root (auto-loaded by the CLI, never committed):
+
+```bash
+# .env
+SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # required for multi-dir use
+OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts
+SCRUM_PROJECT_ID=1                               # MCP server only
+```
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCRUM_DB_PATH` | `./agentscrum.db` | SQLite file path |
-| `SCRUM_PROJECT_ID` | — | Active project ID (CLI + MCP context) |
-| `OBSIDIAN_VAULT_PATH` | `~/Orion/Claude-Workspace` | Vault root for export script |
+| `SCRUM_DB_PATH` | `./agentscrum.db` | SQLite path — use absolute path so CLI works from any directory |
+| `SCRUM_PROJECT_ID` | — | Used by MCP server; CLI takes project name as first argument instead |
+| `OBSIDIAN_VAULT_PATH` | `~/Orion/Claude-Workspace` | Vault root for `export-sprint.ts` |
 
 ## Roadmap
 

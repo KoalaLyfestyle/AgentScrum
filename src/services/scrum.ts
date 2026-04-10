@@ -69,6 +69,16 @@ export function getProject(projectId: number): Project {
   return project as Project;
 }
 
+export function findProject(nameOrId: string): Project {
+  const db = getDb();
+  const asId = parseInt(nameOrId, 10);
+  const project = isNaN(asId)
+    ? db.select().from(schema.projects).where(eq(schema.projects.name, nameOrId)).get()
+    : db.select().from(schema.projects).where(eq(schema.projects.id, asId)).get();
+  if (!project) throw new Error(`Project "${nameOrId}" not found. Run 'scrum init <name>' to create it.`);
+  return project as Project;
+}
+
 // --- Epics ---
 
 export function createEpic(projectId: number, title: string): Epic {
