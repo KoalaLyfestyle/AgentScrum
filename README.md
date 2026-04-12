@@ -9,9 +9,9 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 | Sprint | Goal | Status |
 |--------|------|--------|
 | 1 | Data model + CLI | ✓ Done |
-| 2 | MCP server (17 tools) | ✓ Done |
-| 3 | Agent-first MVP: story points, work package, DoD | ✓ Done |
-| 4 | SvelteKit dashboard | Parked |
+| 2 | MCP server | ✓ Done |
+| 3 | Story points, work package, DoD | ✓ Done |
+| 4 | CLI polish, multi-project, edit operations | ✓ Done |
 
 ## Stack
 
@@ -19,8 +19,8 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 |-------|-----------|
 | Backend | Node.js + TypeScript |
 | Database | SQLite via Drizzle ORM |
-| Agent interface | MCP server (stdio) |
-| Dashboard | SvelteKit *(Sprint 4, parked)* |
+| Agent interface | MCP server (stdio, 23 tools) |
+| CLI | Commander.js (`scrum` command) |
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ npm link
 
 # 4. Verify
 scrum --version          # 0.1.0
-scrum help               # full command reference
+scrum --help             # full command reference
 ```
 
 > **No build step required.** The `scrum` command runs TypeScript directly via `tsx`.
@@ -46,17 +46,38 @@ scrum help               # full command reference
 
 ```bash
 # 5. Create your first project (interactive DoD prompt)
-export SCRUM_DB_PATH=/path/to/your/agentscrum.db
 scrum init myproject
 
 # 6. Register the MCP server with Claude Code
 claude mcp add agentscrum \
   -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
-  -e SCRUM_PROJECT_ID=1 \
   -- node_modules/.bin/tsx /absolute/path/to/src/mcp/server.ts
 ```
 
-Once registered, all 21 MCP tools are available in every Claude Code session.
+Once registered, all 23 MCP tools are available in every Claude Code session.
+
+## Project Selection
+
+The CLI resolves your project in three ways, in order:
+
+1. **Explicit name or ID:** `scrum myproject issue list`
+2. **CWD auto-detection:** if you `cd` into a project's directory (or a subdirectory), the project is detected automatically — no prefix needed
+3. **Env var fallback:** `SCRUM_PROJECT_ID=1` (useful in scripts)
+
+```bash
+# All equivalent when inside ~/projects/myproject/
+scrum issue list
+scrum myproject issue list
+SCRUM_PROJECT_ID=1 scrum issue list
+```
+
+## Issue & Epic Keys
+
+Issues are displayed as **E01-I05** (epic number + issue number within that epic). Both numbers are sequential and stable — they don't change as more issues are added.
+
+Epics display as **E01 — CLI & Human UX**.
+
+The underlying numeric `id` is always available in `--json` output for programmatic use.
 
 ## Agent Usage Pattern
 
@@ -64,21 +85,20 @@ Once registered, all 21 MCP tools are available in every Claude Code session.
 ```json
 scrum_get_work_package { "project_id": 1, "capacity": 20 }
 ```
-Returns: sprint state, DoD checklist, and fully-briefed issues (title, description, ACs) up to capacity. No follow-up reads needed.
+Returns: sprint state, DoD checklist, and fully-briefed issues (title, description, ACs) up to capacity in story points. No follow-up reads needed.
 
 **Session end** — log work and complete DoD:
 ```json
-scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 scrum_update_issue_status { "issue_id": 3, "status": "done" }
+scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools
+## MCP Tools (23)
 
 ### Read
 | Tool | Description |
 |------|-------------|
 | `scrum_get_current_sprint` | Active sprint + all issues + status summary |
-| `scrum_get_sprint_summary` | Issue count breakdown by status for a sprint |
 | `scrum_get_issue_detail` | Full issue: ACs, sessions, assignment |
 | `scrum_get_my_issues` | Issues assigned to a specific agent |
 | `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. |
@@ -88,14 +108,17 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 |------|-------------|
 | `scrum_init_project` | Create project + Sprint 1 |
 | `scrum_create_epic` | Create an epic |
+| `scrum_update_epic` | Rename an epic or change its status |
 | `scrum_create_sprint` | Create next sprint (planning) |
 | `scrum_start_sprint` | Transition sprint → active |
 | `scrum_close_sprint` | Transition sprint → closed |
+| `scrum_update_sprint` | Update sprint title, goal, PR title, PR description |
 
 ### Issues
 | Tool | Description |
 |------|-------------|
 | `scrum_create_issue` | Create issue with optional description and story points |
+| `scrum_update_issue` | Edit title, description, priority, type, or story points after creation |
 | `scrum_update_issue_status` | Transition issue status |
 | `scrum_assign_issue` | Assign issue to an agent |
 | `scrum_estimate_issue` | Set story point estimate (Fibonacci: 1,2,3,5,8,13) |
@@ -121,49 +144,68 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 
 ## CLI Commands
 
-All commands (except `init`) take the project name or ID as the first argument:
-
 ```
 scrum <project> <command> [args]
 ```
 
+When run from inside a project directory, `<project>` can be omitted.
+
 ```bash
-scrum help                         # top-level help with examples
-scrum help <command>               # e.g. scrum help issue
-
-# Project setup
+# ── Global ──────────────────────────────────────────────────────────────
 scrum init <project-name>          # create project + Sprint 1 (interactive DoD prompt)
+scrum project list                 # list all projects
 
-# Sprint state
-scrum <project> status             # sprint summary + DoD checklist
+# ── Sprint ───────────────────────────────────────────────────────────────
+scrum <project> sprint list                     # all sprints with title + status
+scrum <project> sprint show <N>                 # full detail for sprint N
+scrum <project> sprint show <N> --verbose       # include issue descriptions
+scrum <project> sprint update <N> \
+  [--title "Cleanup"] \
+  [--goal "..."] \
+  [--pr-title "Sprint N: ..."] \
+  [--pr-desc "..."]
+scrum <project> sprint velocity                 # story points completed per sprint
+
+# ── Status (current sprint summary) ─────────────────────────────────────
+scrum <project> status             # sprint summary + active issue + DoD
 scrum <project> status --json      # machine-readable JSON
 
-# Epics
-scrum <project> epic add <title>
+# ── Epics ────────────────────────────────────────────────────────────────
+scrum <project> epic list                       # E01, E02... with status
+scrum <project> epic add <title>               # create a new epic
+scrum <project> epic edit <epic-id> \
+  [--title "New Name"] [--status active|complete|paused]
+scrum <project> epic status <epic-id> <status>
 
-# Issues
-scrum <project> issue list                      # all issues in current sprint
-scrum <project> issue list --full               # with description + ACs inline
+# ── Issues ───────────────────────────────────────────────────────────────
+scrum <project> issue list                      # E01-I01 keys, current sprint
+scrum <project> issue list --sprint <N>         # historical sprint
+scrum <project> issue list --verbose            # include description + ACs inline
 scrum <project> issue list --json               # full JSON (for agent consumption)
 scrum <project> issue add <epic-id> <title> \
   [--type feature|bugfix|refactor|test|docs] \
   [--priority high|medium|low] \
   [--description "what to build"] \
-  [--points 3]                                  # story point estimate
+  [--points 3]
+scrum <project> issue edit <issue-id> \
+  [--title "..."] [--description "..."] \
+  [--priority high|medium|low] \
+  [--type feature|bugfix|...] [--points 5]
 scrum <project> issue status <id> <status>      # todo|in_progress|review|done|blocked
 scrum <project> issue show <id>                 # ACs, sessions, token count
 scrum <project> issue ac <id> <text>            # add acceptance criterion
 
-# Definition of Done
+# ── Backlog ───────────────────────────────────────────────────────────────
+scrum <project> backlog                         # issues in planning sprints
+
+# ── Definition of Done ───────────────────────────────────────────────────
 scrum <project> dod list           # show DoD checklist
 scrum <project> dod add "<step>"   # append item
 scrum <project> dod remove <id>    # remove item
 
-# Session logging
+# ── Session logging ───────────────────────────────────────────────────────
 scrum <project> log <issue-id> <summary> [--tokens N] [--auditor pass|fail|skipped]
 ```
-
-`<project>` can be the project name (e.g. `myproject`) or numeric ID (e.g. `1`). `SCRUM_PROJECT_ID` still works as a fallback env var (used by the MCP server).
 
 ## Story Points
 
@@ -174,7 +216,7 @@ Set during sprint planning:
 scrum_estimate_issue { "issue_id": 5, "story_points": 3 }
 ```
 
-Token actuals (`tokens_used` per issue) remain tracked for retrospective cost analysis. Story points are the planning unit; tokens are the forensic unit.
+Token actuals (`tokens_used` per issue) are tracked for retrospective cost analysis. Story points are the planning unit; tokens are the forensic unit.
 
 ## Definition of Done
 
@@ -182,9 +224,9 @@ Project-wide checklist every agent must complete after finishing an issue. Retur
 
 Set interactively on project init, or at any time:
 ```bash
-SCRUM_PROJECT_ID=1 npx agentscrum dod add "Run npm test"
-SCRUM_PROJECT_ID=1 npx agentscrum dod add "Commit changes"
-SCRUM_PROJECT_ID=1 npx agentscrum dod add "Push to remote"
+scrum myproject dod add "Run npm test"
+scrum myproject dod add "Commit changes"
+scrum myproject dod add "Push to remote"
 ```
 
 Or via MCP (for PM agents):
@@ -198,40 +240,32 @@ Exports sprint history, decisions, and lessons to Obsidian. Run at sprint close:
 
 ```bash
 npx tsx scripts/export-sprint.ts --sprint <N> [--project <id>]
-# OBSIDIAN_VAULT_PATH env var (default: ~/Orion/Claude-Workspace)
+# Env: OBSIDIAN_VAULT_PATH (default: ~/obsidian-vault)
 # Writes: projects/<name>/sprints/sprint-N.md, decisions/, lessons/
 ```
 
 ## Environment Variables
 
-Create a `.env` file in the project root (auto-loaded by the CLI, never committed):
-
 ```bash
-# .env
-SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # required for multi-dir use
-OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts
-SCRUM_PROJECT_ID=1                               # MCP server only
+SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: ./agentscrum.db)
+OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
+SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SCRUM_DB_PATH` | `./agentscrum.db` | SQLite path — use absolute path so CLI works from any directory |
-| `SCRUM_PROJECT_ID` | — | Used by MCP server; CLI takes project name as first argument instead |
-| `OBSIDIAN_VAULT_PATH` | `~/Orion/Claude-Workspace` | Vault root for `export-sprint.ts` |
+| `SCRUM_PROJECT_ID` | — | Used by MCP server and scripts; CLI takes project name as first argument |
+| `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts` |
 
 ## Roadmap
 
 ### Near-term
 - Blocked issue reason field — structured blocker description on `blocked` status transition
 - `scrum_get_retrospective` — queries blocked issues, failed ACs, high-token issues for sprint summary
-- Token velocity per sprint/agent/model — answer "what did this sprint cost?"
+- Token velocity per sprint/agent/model — "what did this sprint cost?"
 
 ### Medium-term
 - Multi-agent conflict detection — prevent two agents claiming the same issue simultaneously
 - Cost reporting — tokens × model price = sprint $ spend
-
-### Sprint 4+
 - SvelteKit sprint board dashboard
-- ML cost predictor — forecast token usage from issue complexity
-- Burndown chart data endpoint — tokens remaining vs calendar day
-- Cross-project lesson search — query lessons by tag across all projects

@@ -64,11 +64,11 @@ export function registerEpic(program: Command): void {
     });
 
   epic
-    .command("add <project-id> <title>")
-    .description("Create a new epic")
-    .action((projectId: string, title: string) => {
+    .command("add <title>")
+    .description("Create a new epic in the current project")
+    .action((title: string) => {
       try {
-        const created = createEpic(parseInt(projectId, 10), title);
+        const created = createEpic(requireProjectId(), title);
         console.log(`Epic created: ${epicKey(created.number)} — ${created.title}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
