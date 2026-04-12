@@ -30,7 +30,7 @@ export function registerInit(program: Command): void {
     .description("Initialize a new AgentScrum project with Sprint 1")
     .action(async (projectName: string) => {
       try {
-        const { project, sprint } = initProject(projectName);
+        const { project, sprint } = initProject(projectName, process.cwd());
         console.log(`Project created: ${project.name} (id: ${project.id})`);
         console.log(`Sprint 1 created (id: ${sprint.id}, status: ${sprint.status})`);
 
@@ -40,8 +40,28 @@ export function registerInit(program: Command): void {
           setDod(project.id, dodItems);
           console.log(`DoD saved (${dodItems.length} item${dodItems.length === 1 ? "" : "s"}).`);
         } else {
-          console.log(`No DoD items added. Use 'npx agentscrum dod add <text>' to add later.`);
+          console.log(`No DoD items added. Use 'scrum ${project.name} dod add <text>' to add later.`);
         }
+
+        console.log(`
+────────────────────────────────────────────────────────
+Add this to your project's CLAUDE.md to wire up AgentScrum:
+
+# ${project.name}
+
+## AgentScrum
+At the start of every session, call:
+  scrum_get_work_package { project_id: ${project.id}, capacity: <story_points> }
+
+This returns your sprint goal, Definition of Done, and fully-briefed
+issues (with ACs) in one call — no follow-up reads needed.
+
+After completing each issue:
+1. Mark it done: scrum_update_issue_status { issue_id: <id>, status: "done" }
+2. Log the session: scrum_log_session { issue_id: <id>, summary: "..." }
+3. Check off DoD items before moving to the next issue.
+────────────────────────────────────────────────────────
+`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

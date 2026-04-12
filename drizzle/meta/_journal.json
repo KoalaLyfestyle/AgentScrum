@@ -22,6 +22,27 @@
       "when": 1775790521994,
       "tag": "0002_bright_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775979906272,
+      "tag": "0003_woozy_blacklash",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1775981386753,
+      "tag": "0004_steady_kree",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1775982230988,
+      "tag": "0005_lush_namora",
+      "breakpoints": true
     }
   ]
 }
