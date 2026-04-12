@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { registerInit } from "./commands/init.js";
+import { registerProject } from "./commands/project.js";
 import { registerEpic } from "./commands/epic.js";
+import { registerSprint } from "./commands/sprint.js";
 import { registerIssue } from "./commands/issue.js";
 import { registerStatus } from "./commands/status.js";
 import { registerLog } from "./commands/log.js";
 import { registerDod } from "./commands/dod.js";
+import { registerBacklog } from "./commands/backlog.js";
 import { findProject } from "../services/scrum.js";
 
 // ---------------------------------------------------------------------------
@@ -16,7 +19,7 @@ import { findProject } from "../services/scrum.js";
 // so Commander sees the subcommand directly.
 // ---------------------------------------------------------------------------
 const RESERVED = new Set([
-  "init", "epic", "issue", "status", "log", "dod", "help",
+  "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "help",
   "--help", "-h", "--version", "-V",
 ]);
 
@@ -50,10 +53,15 @@ program
       "  scrum init myproject              # create project + Sprint 1",
       "  scrum myproject status            # sprint summary",
       "  scrum myproject status --json     # machine-readable output",
-      "  scrum myproject issue list --full # issues with ACs inline",
-      "  scrum myproject issue list --json # full JSON for agent use",
-      "  scrum myproject issue add 1 'Auth route' --description 'Add JWT middleware' --points 3",
-      "  scrum myproject dod list          # show Definition of Done",
+      "  scrum myproject issue list --full   # issues with ACs inline",
+      "  scrum myproject issue list --json   # full JSON for agent use",
+      "  scrum myproject issue edit 5 --priority high --points 3",
+      "  scrum myproject sprint list         # all sprints with titles + status",
+      "  scrum myproject sprint update 4 --title 'Cleanup' --pr-title 'Sprint 4: Polish'",
+      "  scrum myproject sprint velocity     # story points completed per sprint",
+      "  scrum myproject backlog             # issues in planning sprints",
+      "  scrum project list                  # all projects",
+      "  scrum myproject dod list            # show Definition of Done",
       "",
       "Environment variables (set in .env or shell):",
       "  SCRUM_DB_PATH      absolute path to SQLite file (default: ./agentscrum.db)",
@@ -64,11 +72,14 @@ program
   .addHelpCommand("help [command]", "Display help for a command");
 
 registerInit(program);
+registerProject(program);
 registerEpic(program);
+registerSprint(program);
 registerIssue(program);
 registerStatus(program);
 registerLog(program);
 registerDod(program);
+registerBacklog(program);
 
 // Show help when called with no arguments
 if (process.argv.length === 2) {

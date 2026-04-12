@@ -22,6 +22,13 @@
       "when": 1775790521994,
       "tag": "0002_bright_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775979906272,
+      "tag": "0003_woozy_blacklash",
+      "breakpoints": true
     }
   ]
 }

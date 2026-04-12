@@ -27,7 +27,10 @@ export const sprints = sqliteTable("sprints", {
   status: text("status", { enum: ["planning", "active", "closed"] })
     .notNull()
     .default("planning"),
+  title: text("title"),
   goal: text("goal"),
+  prTitle: text("pr_title"),
+  prDescription: text("pr_description"),
   startedAt: text("started_at"),
   closedAt: text("closed_at"),
 });

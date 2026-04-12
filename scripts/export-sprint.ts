@@ -218,7 +218,7 @@ if (decisions.length === 0) console.log("  (no decisions to export)");
 // Lessons export
 // ---------------------------------------------------------------------------
 const lessons = db
-  .prepare("SELECT * FROM lessons WHERE project_id = ? OR project_id IS NULL ORDER BY id")
+  .prepare("SELECT * FROM lessons WHERE project_id = ? ORDER BY id")
   .all(projectId) as Array<{
   id: number;
   title: string;

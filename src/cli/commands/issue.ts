@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import {
   createIssue,
   listIssues,
+  updateIssue,
   updateIssueStatus,
   getIssueDetail,
   getActiveSprint,
@@ -60,8 +61,9 @@ export function registerIssue(program: Command): void {
     .command("list")
     .description("List all issues in the current sprint")
     .option("--full", "Include acceptance criteria and description for each issue")
+    .option("-V, --verbose", "Include description beneath each issue (alias for --full)")
     .option("--json", "Output as JSON (structured, machine-readable)")
-    .action((opts: { full?: boolean; json?: boolean }) => {
+    .action((opts: { full?: boolean; verbose?: boolean; json?: boolean }) => {
       try {
         const sprint = getActiveSprint(projectId());
         const issues = listIssues(sprint.id);
@@ -76,14 +78,15 @@ export function registerIssue(program: Command): void {
           console.log(`No issues in Sprint ${sprint.number}`);
           return;
         }
-        console.log(`Sprint ${sprint.number} — ${issues.length} issue(s):\n`);
+        const sprintLabel = sprint.title ? `Sprint ${sprint.number} — ${sprint.title}` : `Sprint ${sprint.number}`;
+        console.log(`${sprintLabel} — ${issues.length} issue(s):\n`);
         const padId = String(Math.max(...issues.map((i) => i.id))).length + 1;
         for (const i of issues) {
           const status = i.status.padEnd(11);
           const priority = i.priority.padEnd(7);
           const pts = i.storyPoints ? ` [${i.storyPoints}pt]` : "";
           console.log(`  #${String(i.id).padStart(padId)} [${status}] [${priority}]${pts} ${i.title}`);
-          if (opts.full) {
+          if (opts.full || opts.verbose) {
             if (i.description) console.log(`         ${i.description}`);
             const detail = getIssueDetail(i.id);
             for (const ac of detail.acs) {
@@ -156,6 +159,48 @@ export function registerIssue(program: Command): void {
         const ac = addAc(parseInt(issueId, 10), text);
         console.log(`AC #${ac.id} added to issue #${ac.issueId}`);
         console.log(`  [ ] ${ac.text}`);
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  issue
+    .command("edit <issue-id>")
+    .description("Edit an issue field after creation")
+    .option("--title <text>", "New title")
+    .option("-d, --description <text>", "New requirements body")
+    .option("-p, --priority <priority>", `New priority (${PRIORITIES.join("|")})`)
+    .option("-t, --type <type>", `New type (${ISSUE_TYPES.join("|")})`)
+    .option("--points <n>", "New story point estimate")
+    .action((issueId: string, opts: { title?: string; description?: string; priority?: string; type?: string; points?: string }) => {
+      try {
+        const patch: Parameters<typeof updateIssue>[1] = {};
+        if (opts.title !== undefined) patch.title = opts.title;
+        if (opts.description !== undefined) patch.description = opts.description;
+        if (opts.priority !== undefined) {
+          if (!PRIORITIES.includes(opts.priority as Priority)) {
+            console.error(`Invalid priority: ${opts.priority}. Must be one of: ${PRIORITIES.join(", ")}`);
+            process.exit(1);
+          }
+          patch.priority = opts.priority as Priority;
+        }
+        if (opts.type !== undefined) {
+          if (!ISSUE_TYPES.includes(opts.type as IssueType)) {
+            console.error(`Invalid type: ${opts.type}. Must be one of: ${ISSUE_TYPES.join(", ")}`);
+            process.exit(1);
+          }
+          patch.type = opts.type as IssueType;
+        }
+        if (opts.points !== undefined) patch.storyPoints = parseInt(opts.points, 10);
+        if (Object.keys(patch).length === 0) {
+          console.error("Error: specify at least one field to update (--title, --description, --priority, --type, --points)");
+          process.exit(1);
+        }
+        const updated = updateIssue(parseInt(issueId, 10), patch);
+        console.log(`Issue #${updated.id} updated: ${updated.title}`);
+        console.log(`  Status: ${updated.status} | Type: ${updated.type} | Priority: ${updated.priority}${updated.storyPoints ? ` | Points: ${updated.storyPoints}` : ""}`);
+        if (updated.description) console.log(`  Description: ${updated.description}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

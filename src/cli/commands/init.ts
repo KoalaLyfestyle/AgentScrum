@@ -40,8 +40,21 @@ export function registerInit(program: Command): void {
           setDod(project.id, dodItems);
           console.log(`DoD saved (${dodItems.length} item${dodItems.length === 1 ? "" : "s"}).`);
         } else {
-          console.log(`No DoD items added. Use 'npx agentscrum dod add <text>' to add later.`);
+          console.log(`No DoD items added. Use 'scrum ${project.name} dod add <text>' to add later.`);
         }
+
+        console.log(`
+────────────────────────────────────────────────────────
+Add this to your project's CLAUDE.md to wire up the MCP:
+
+Start every session as PM. Read these in order before any work:
+1. ORION.md — project context and constraints
+2. /path/to/config/workflow/pm.md — PM role instructions
+3. Call \`scrum_get_work_package {project_id: ${project.id}, capacity: <N>}\` — sprint state + DoD + fully-briefed issues in one shot
+
+Then follow the PM → [Researcher] → Builder → Auditor → PM loop.
+────────────────────────────────────────────────────────
+`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type {
   Project,
@@ -17,6 +17,7 @@ import type {
   DodItem,
   IssueDetail,
   SprintSummary,
+  SprintVelocity,
   WorkPackage,
   IssueStatus,
   IssueType,
@@ -79,7 +80,21 @@ export function findProject(nameOrId: string): Project {
   return project as Project;
 }
 
+export function listProjects(): Project[] {
+  const db = getDb();
+  return db.select().from(schema.projects).all() as Project[];
+}
+
 // --- Epics ---
+
+export function listEpics(projectId: number): Epic[] {
+  const db = getDb();
+  return db
+    .select()
+    .from(schema.epics)
+    .where(eq(schema.epics.projectId, projectId))
+    .all() as Epic[];
+}
 
 export function createEpic(projectId: number, title: string): Epic {
   const db = getDb();
@@ -121,6 +136,30 @@ export function createSprint(projectId: number): Sprint {
     .returning()
     .get();
   if (!sprint) throw new Error("Failed to create sprint");
+  return sprint as Sprint;
+}
+
+export function listSprints(projectId: number): Sprint[] {
+  const db = getDb();
+  return db
+    .select()
+    .from(schema.sprints)
+    .where(eq(schema.sprints.projectId, projectId))
+    .all() as Sprint[];
+}
+
+export function updateSprint(
+  sprintId: number,
+  patch: { title?: string; goal?: string; prTitle?: string; prDescription?: string }
+): Sprint {
+  const db = getDb();
+  const sprint = db
+    .update(schema.sprints)
+    .set(patch)
+    .where(eq(schema.sprints.id, sprintId))
+    .returning()
+    .get();
+  if (!sprint) throw new Error(`Sprint ${sprintId} not found`);
   return sprint as Sprint;
 }
 
@@ -259,6 +298,67 @@ export function estimateIssue(issueId: number, storyPoints: number): Issue {
     .get();
   if (!issue) throw new Error(`Issue ${issueId} not found`);
   return issue as Issue;
+}
+
+export function updateIssue(
+  issueId: number,
+  patch: {
+    title?: string;
+    description?: string;
+    priority?: Priority;
+    type?: IssueType;
+    storyPoints?: number;
+  }
+): Issue {
+  const db = getDb();
+  const issue = db
+    .update(schema.issues)
+    .set(patch)
+    .where(eq(schema.issues.id, issueId))
+    .returning()
+    .get();
+  if (!issue) throw new Error(`Issue ${issueId} not found`);
+  return issue as Issue;
+}
+
+export function getBacklog(projectId: number): Issue[] {
+  // Backlog = issues in planning sprints (not yet started)
+  const db = getDb();
+  const planningSprints = db
+    .select()
+    .from(schema.sprints)
+    .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
+    .all();
+  if (planningSprints.length === 0) return [];
+  const sprintIds = planningSprints.map((s) => s.id);
+  const issues = db.select().from(schema.issues).all() as Issue[];
+  return issues.filter((i) => sprintIds.includes(i.sprintId));
+}
+
+export function getVelocity(projectId: number): SprintVelocity[] {
+  const db = getDb();
+  const closedSprints = db
+    .select()
+    .from(schema.sprints)
+    .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "closed")))
+    .all() as Sprint[];
+
+  return closedSprints.map((sprint) => {
+    const doneIssues = db
+      .select()
+      .from(schema.issues)
+      .where(and(eq(schema.issues.sprintId, sprint.id), eq(schema.issues.status, "done")))
+      .all() as Issue[];
+
+    const pointsCompleted = doneIssues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0);
+
+    return {
+      sprintNumber: sprint.number,
+      sprintTitle: sprint.title ?? undefined,
+      pointsCompleted,
+      issuesCompleted: doneIssues.length,
+    };
+  });
 }
 
 export function listIssues(sprintId: number): Issue[] {

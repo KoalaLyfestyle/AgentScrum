@@ -27,9 +27,19 @@ export interface Sprint {
   projectId: number;
   number: number;
   status: SprintStatus;
+  title?: string;
   goal?: string;
+  prTitle?: string;
+  prDescription?: string;
   startedAt?: string;
   closedAt?: string;
+}
+
+export interface SprintVelocity {
+  sprintNumber: number;
+  sprintTitle?: string;
+  pointsCompleted: number;
+  issuesCompleted: number;
 }
 
 export interface Issue {

@@ -338,6 +338,121 @@ server.registerTool(
 );
 
 // ---------------------------------------------------------------------------
+// EDIT TOOLS — update sprint / issue after creation
+// ---------------------------------------------------------------------------
+
+server.registerTool(
+  "scrum_update_sprint",
+  {
+    description:
+      "Update a sprint's title, goal, PR title, or PR description. Any combination of fields can be set. Use during or after sprint planning.",
+    inputSchema: {
+      sprint_id: z.number().int().describe("Sprint ID"),
+      title: z.string().optional().describe("Human-readable sprint name, e.g. 'Cleanup & Polish'"),
+      goal: z.string().optional().describe("Sprint goal — what we're trying to achieve"),
+      pr_title: z.string().optional().describe("PR title to use when merging the sprint branch"),
+      pr_description: z.string().optional().describe("PR description / merge commit body"),
+    },
+  },
+  (args) =>
+    safe(() =>
+      scrum.updateSprint(args.sprint_id, {
+        title: args.title,
+        goal: args.goal,
+        prTitle: args.pr_title,
+        prDescription: args.pr_description,
+      })
+    )
+);
+
+server.registerTool(
+  "scrum_update_issue",
+  {
+    description:
+      "Edit an issue after creation. Update title, description, priority, type, or story point estimate. At least one field must be provided.",
+    inputSchema: {
+      issue_id: z.number().int().describe("Issue ID"),
+      title: z.string().optional().describe("New title"),
+      description: z.string().optional().describe("New requirements body"),
+      priority: z.enum(["high", "medium", "low"]).optional().describe("New priority"),
+      type: z.enum(["feature", "bugfix", "refactor", "test", "docs"]).optional().describe("New type"),
+      story_points: z.number().int().min(1).max(13).optional().describe("New story point estimate"),
+    },
+  },
+  (args) => {
+    const patch: Parameters<typeof scrum.updateIssue>[1] = {};
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.description !== undefined) patch.description = args.description;
+    if (args.priority !== undefined) patch.priority = args.priority;
+    if (args.type !== undefined) patch.type = args.type;
+    if (args.story_points !== undefined) patch.storyPoints = args.story_points;
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text" as const, text: "Specify at least one field to update" }], isError: true };
+    }
+    return safe(() => scrum.updateIssue(args.issue_id, patch));
+  }
+);
+
+// ---------------------------------------------------------------------------
+// READ TOOLS — backlog + velocity + lists
+// ---------------------------------------------------------------------------
+
+server.registerTool(
+  "scrum_list_projects",
+  {
+    description: "List all projects in the database.",
+    inputSchema: {},
+  },
+  () => safe(() => scrum.listProjects())
+);
+
+server.registerTool(
+  "scrum_list_sprints",
+  {
+    description: "List all sprints for a project with their status, title, and goal.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+    },
+  },
+  (args) => safe(() => scrum.listSprints(args.project_id))
+);
+
+server.registerTool(
+  "scrum_list_epics",
+  {
+    description: "List all epics for a project.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+    },
+  },
+  (args) => safe(() => scrum.listEpics(args.project_id))
+);
+
+server.registerTool(
+  "scrum_get_backlog",
+  {
+    description:
+      "Get all backlog issues for a project — issues in planning sprints that haven't been started yet. Use during sprint planning to decide what goes into the next sprint.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+    },
+  },
+  (args) => safe(() => scrum.getBacklog(args.project_id))
+);
+
+server.registerTool(
+  "scrum_get_velocity",
+  {
+    description:
+      "Get story point velocity per closed sprint. Returns completed story points and issue count per sprint. Use to calibrate capacity estimates for upcoming sprints.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+    },
+  },
+  (args) => safe(() => scrum.getVelocity(args.project_id))
+);
+
+// ---------------------------------------------------------------------------
 // KNOWLEDGE TOOLS — decisions + lessons
 // ---------------------------------------------------------------------------
 
