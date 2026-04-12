@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { registerInit } from "./commands/init.js";
+import { registerProject } from "./commands/project.js";
 import { registerEpic } from "./commands/epic.js";
+import { registerSprint } from "./commands/sprint.js";
 import { registerIssue } from "./commands/issue.js";
 import { registerStatus } from "./commands/status.js";
 import { registerLog } from "./commands/log.js";
 import { registerDod } from "./commands/dod.js";
-import { findProject } from "../services/scrum.js";
+import { registerBacklog } from "./commands/backlog.js";
+import { findProject, findProjectByDirectory } from "../services/scrum.js";
 
 // ---------------------------------------------------------------------------
 // Project resolution
@@ -16,12 +19,13 @@ import { findProject } from "../services/scrum.js";
 // so Commander sees the subcommand directly.
 // ---------------------------------------------------------------------------
 const RESERVED = new Set([
-  "init", "epic", "issue", "status", "log", "dod", "help",
+  "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "help",
   "--help", "-h", "--version", "-V",
 ]);
 
 const firstArg = process.argv[2];
 if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
+  // Explicit project name/id passed — resolve it
   try {
     const project = findProject(firstArg);
     process.env["SCRUM_PROJECT_ID"] = String(project.id);
@@ -29,6 +33,17 @@ if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
+  }
+} else if (!process.env["SCRUM_PROJECT_ID"]) {
+  // No explicit project and no env var — try CWD detection
+  try {
+    const detected = findProjectByDirectory(process.cwd());
+    if (detected) {
+      process.env["SCRUM_PROJECT_ID"] = String(detected.id);
+    }
+    // If not detected, commands that need a project will show a helpful error at runtime
+  } catch {
+    // DB not set up yet — commands that need a project will handle this
   }
 }
 
@@ -50,10 +65,15 @@ program
       "  scrum init myproject              # create project + Sprint 1",
       "  scrum myproject status            # sprint summary",
       "  scrum myproject status --json     # machine-readable output",
-      "  scrum myproject issue list --full # issues with ACs inline",
-      "  scrum myproject issue list --json # full JSON for agent use",
-      "  scrum myproject issue add 1 'Auth route' --description 'Add JWT middleware' --points 3",
-      "  scrum myproject dod list          # show Definition of Done",
+      "  scrum myproject issue list --full   # issues with ACs inline",
+      "  scrum myproject issue list --json   # full JSON for agent use",
+      "  scrum myproject issue edit 5 --priority high --points 3",
+      "  scrum myproject sprint list         # all sprints with titles + status",
+      "  scrum myproject sprint update 4 --title 'Cleanup' --pr-title 'Sprint 4: Polish'",
+      "  scrum myproject sprint velocity     # story points completed per sprint",
+      "  scrum myproject backlog             # issues in planning sprints",
+      "  scrum project list                  # all projects",
+      "  scrum myproject dod list            # show Definition of Done",
       "",
       "Environment variables (set in .env or shell):",
       "  SCRUM_DB_PATH      absolute path to SQLite file (default: ./agentscrum.db)",
@@ -64,11 +84,14 @@ program
   .addHelpCommand("help [command]", "Display help for a command");
 
 registerInit(program);
+registerProject(program);
 registerEpic(program);
+registerSprint(program);
 registerIssue(program);
 registerStatus(program);
 registerLog(program);
 registerDod(program);
+registerBacklog(program);
 
 // Show help when called with no arguments
 if (process.argv.length === 2) {

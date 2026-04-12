@@ -1,14 +1,6 @@
 import type { Command } from "commander";
-import { getActiveSprint, getSprintSummary, listDod } from "../../services/scrum.js";
-
-function projectId(): number {
-  const raw = process.env["SCRUM_PROJECT_ID"];
-  if (!raw) {
-    console.error("Error: SCRUM_PROJECT_ID env var is required");
-    process.exit(1);
-  }
-  return parseInt(raw, 10);
-}
+import { getActiveSprint, getSprintSummary, listDod, listEpics, issueKey } from "../../services/scrum.js";
+import { requireProjectId } from "../projectContext.js";
 
 export function registerStatus(program: Command): void {
   program
@@ -17,7 +9,7 @@ export function registerStatus(program: Command): void {
     .option("--json", "Output as JSON (structured, machine-readable)")
     .action((opts: { json?: boolean }) => {
       try {
-        const pid = projectId();
+        const pid = requireProjectId();
         const sprint = getActiveSprint(pid);
         const summary = getSprintSummary(sprint.id);
         const dod = listDod(pid);
@@ -40,7 +32,10 @@ export function registerStatus(program: Command): void {
         }
 
         if (summary.activeIssue) {
-          console.log(`\nActive: #${summary.activeIssue.id} — ${summary.activeIssue.title}`);
+          const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
+          const epic = epicsMap.get(summary.activeIssue.epicId);
+          const key = epic ? issueKey(epic.number, summary.activeIssue.number) : `#${summary.activeIssue.id}`;
+          console.log(`\nActive: ${key} — ${summary.activeIssue.title}`);
         }
 
         if (dod.length > 0) {

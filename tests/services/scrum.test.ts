@@ -217,3 +217,129 @@ describe("getWorkPackage", () => {
     expect(pkg.capacityUsed).toBe(5);
   });
 });
+
+describe("updateIssue", () => {
+  it("updates title, description, priority, type, and story points", () => {
+    const { project, sprint } = scrum.initProject("update-issue-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    const issue = scrum.createIssue(epic.id, sprint.id, "Original title", "feature", "low");
+
+    const updated = scrum.updateIssue(issue.id, {
+      title: "New title",
+      description: "New desc",
+      priority: "high",
+      type: "bugfix",
+      storyPoints: 5,
+    });
+    expect(updated.title).toBe("New title");
+    expect(updated.description).toBe("New desc");
+    expect(updated.priority).toBe("high");
+    expect(updated.type).toBe("bugfix");
+    expect(updated.storyPoints).toBe(5);
+  });
+});
+
+describe("updateSprint", () => {
+  it("updates title, goal, pr_title, pr_description", () => {
+    const { sprint } = scrum.initProject("update-sprint-test");
+    const updated = scrum.updateSprint(sprint.id, {
+      title: "Cleanup",
+      goal: "Ship the polish sprint",
+      prTitle: "Sprint 1: Cleanup",
+      prDescription: "Full PR description here",
+    });
+    expect(updated.title).toBe("Cleanup");
+    expect(updated.goal).toBe("Ship the polish sprint");
+    expect(updated.prTitle).toBe("Sprint 1: Cleanup");
+    expect(updated.prDescription).toBe("Full PR description here");
+  });
+});
+
+describe("listProjects / listSprints / listEpics", () => {
+  it("lists all projects", () => {
+    scrum.initProject("proj-a");
+    scrum.initProject("proj-b");
+    const projects = scrum.listProjects();
+    expect(projects.length).toBeGreaterThanOrEqual(2);
+    expect(projects.map((p) => p.name)).toEqual(expect.arrayContaining(["proj-a", "proj-b"]));
+  });
+
+  it("lists sprints for a project", () => {
+    const { project } = scrum.initProject("sprints-test");
+    scrum.createSprint(project.id);
+    const sprints = scrum.listSprints(project.id);
+    expect(sprints.length).toBe(2);
+    expect(sprints[0]!.number).toBe(1);
+    expect(sprints[1]!.number).toBe(2);
+  });
+
+  it("lists epics for a project", () => {
+    const { project } = scrum.initProject("epics-test");
+    scrum.createEpic(project.id, "Alpha");
+    scrum.createEpic(project.id, "Beta");
+    const epics = scrum.listEpics(project.id);
+    expect(epics.length).toBe(2);
+    expect(epics.map((e) => e.title)).toEqual(["Alpha", "Beta"]);
+  });
+});
+
+describe("getBacklog", () => {
+  it("returns issues in planning sprints", () => {
+    const { project, sprint } = scrum.initProject("backlog-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    // Sprint 1 is planning — issues here are backlog
+    scrum.createIssue(epic.id, sprint.id, "Backlog issue A");
+    scrum.createIssue(epic.id, sprint.id, "Backlog issue B");
+    const backlog = scrum.getBacklog(project.id);
+    expect(backlog.length).toBe(2);
+    expect(backlog.map((i) => i.title)).toEqual(["Backlog issue A", "Backlog issue B"]);
+  });
+
+  it("excludes issues from active/closed sprints", () => {
+    const { project, sprint } = scrum.initProject("backlog-active-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    scrum.createIssue(epic.id, sprint.id, "Active sprint issue");
+    const backlog = scrum.getBacklog(project.id);
+    expect(backlog.length).toBe(0);
+  });
+});
+
+describe("getVelocity", () => {
+  it("returns 0 for projects with no closed sprints", () => {
+    const { project } = scrum.initProject("velocity-empty-test");
+    expect(scrum.getVelocity(project.id)).toEqual([]);
+  });
+
+  it("sums story points of done issues in closed sprints", () => {
+    const { project, sprint } = scrum.initProject("velocity-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const i1 = scrum.createIssue(epic.id, sprint.id, "A");
+    scrum.estimateIssue(i1.id, 3);
+    scrum.updateIssueStatus(i1.id, "done");
+    const i2 = scrum.createIssue(epic.id, sprint.id, "B");
+    scrum.estimateIssue(i2.id, 5);
+    scrum.updateIssueStatus(i2.id, "done");
+    const i3 = scrum.createIssue(epic.id, sprint.id, "C"); // no estimate, not done
+    scrum.closeSprint(sprint.id);
+
+    const velocity = scrum.getVelocity(project.id);
+    expect(velocity.length).toBe(1);
+    expect(velocity[0]!.pointsCompleted).toBe(8);
+    expect(velocity[0]!.issuesCompleted).toBe(2);
+  });
+
+  it("excludes unestimated issues from velocity points", () => {
+    const { project, sprint } = scrum.initProject("velocity-null-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const i1 = scrum.createIssue(epic.id, sprint.id, "No points");
+    scrum.updateIssueStatus(i1.id, "done");
+    scrum.closeSprint(sprint.id);
+
+    const velocity = scrum.getVelocity(project.id);
+    expect(velocity[0]!.pointsCompleted).toBe(0);
+    expect(velocity[0]!.issuesCompleted).toBe(1);
+  });
+});

@@ -3,6 +3,7 @@ import { sqliteTable, integer, text, real } from "drizzle-orm/sqlite-core";
 export const projects = sqliteTable("projects", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
+  directory: text("directory"), // absolute path to project root; used for CWD-based auto-detection
   createdAt: text("created_at").notNull(),
 });
 
@@ -11,6 +12,7 @@ export const epics = sqliteTable("epics", {
   projectId: integer("project_id", { mode: "number" })
     .notNull()
     .references(() => projects.id),
+  number: integer("number", { mode: "number" }).notNull().default(0), // sequential per project; set on insert
   title: text("title").notNull(),
   status: text("status", { enum: ["active", "complete", "paused"] })
     .notNull()
@@ -27,7 +29,10 @@ export const sprints = sqliteTable("sprints", {
   status: text("status", { enum: ["planning", "active", "closed"] })
     .notNull()
     .default("planning"),
+  title: text("title"),
   goal: text("goal"),
+  prTitle: text("pr_title"),
+  prDescription: text("pr_description"),
   startedAt: text("started_at"),
   closedAt: text("closed_at"),
 });
@@ -40,6 +45,7 @@ export const issues = sqliteTable("issues", {
   sprintId: integer("sprint_id", { mode: "number" })
     .notNull()
     .references(() => sprints.id),
+  number: integer("number", { mode: "number" }).notNull().default(0), // sequential per epic; set on insert
   title: text("title").notNull(),
   description: text("description"),
   type: text("type", {

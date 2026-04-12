@@ -11,12 +11,14 @@ export type AuditorVerdict = "pass" | "fail" | "skipped";
 export interface Project {
   id: number;
   name: string;
+  directory?: string | null; // absolute path set at init time; used for CWD-based auto-detection
   createdAt: string; // ISO 8601
 }
 
 export interface Epic {
   id: number;
   projectId: number;
+  number: number; // sequential per project; display as E01, E02, ...
   title: string;
   status: EpicStatus;
   createdAt: string;
@@ -27,15 +29,26 @@ export interface Sprint {
   projectId: number;
   number: number;
   status: SprintStatus;
+  title?: string;
   goal?: string;
+  prTitle?: string;
+  prDescription?: string;
   startedAt?: string;
   closedAt?: string;
+}
+
+export interface SprintVelocity {
+  sprintNumber: number;
+  sprintTitle?: string;
+  pointsCompleted: number;
+  issuesCompleted: number;
 }
 
 export interface Issue {
   id: number;
   epicId: number;
   sprintId: number;
+  number: number; // sequential per epic; display as E01-I01, E01-I02, ...
   title: string;
   description?: string;
   type: IssueType;

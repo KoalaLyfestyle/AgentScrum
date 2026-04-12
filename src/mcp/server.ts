@@ -66,17 +66,6 @@ server.registerTool(
 );
 
 server.registerTool(
-  "scrum_get_sprint_summary",
-  {
-    description: "Get issue count breakdown by status for a sprint.",
-    inputSchema: {
-      sprint_id: z.number().int().describe("Sprint ID"),
-    },
-  },
-  (args) => safe(() => scrum.getSprintSummary(args.sprint_id))
-);
-
-server.registerTool(
   "scrum_get_issue_detail",
   {
     description:
@@ -94,7 +83,7 @@ server.registerTool(
     description: "Get all issues assigned to a specific agent in the current sprint.",
     inputSchema: {
       project_id: z.number().int().describe("Project ID"),
-      agent_id: z.string().describe("Agent identifier (e.g. 'builder', 'auditor', 'orion')"),
+      agent_id: z.string().describe("Agent identifier (e.g. 'pm', 'builder', 'auditor')"),
     },
   },
   (args) =>
@@ -213,7 +202,7 @@ server.registerTool(
 server.registerTool(
   "scrum_assign_issue",
   {
-    description: "Assign an issue to an agent. Use the agent's identifier (e.g. 'builder', 'orion').",
+    description: "Assign an issue to an agent. Use the agent's identifier (e.g. 'pm', 'builder', 'auditor').",
     inputSchema: {
       issue_id: z.number().int().describe("Issue ID"),
       agent_id: z.string().describe("Agent identifier"),
@@ -335,6 +324,76 @@ server.registerTool(
     },
   },
   (args) => safe(() => scrum.addDodItem(args.project_id, args.text, args.order))
+);
+
+// ---------------------------------------------------------------------------
+// EDIT TOOLS — update sprint / issue after creation
+// ---------------------------------------------------------------------------
+
+server.registerTool(
+  "scrum_update_epic",
+  {
+    description: "Rename an epic. Epics are thematic categories (e.g. 'CLI', 'MCP Server') that remain open indefinitely — they have no status.",
+    inputSchema: {
+      epic_id: z.number().int().describe("Epic ID"),
+      title: z.string().describe("New epic title"),
+    },
+  },
+  (args) => safe(() => scrum.updateEpic(args.epic_id, { title: args.title }))
+);
+
+server.registerTool(
+  "scrum_update_sprint",
+  {
+    description:
+      "Update a sprint's title, goal, PR title, or PR description. Any combination of fields can be set. Use during or after sprint planning.",
+    inputSchema: {
+      sprint_id: z.number().int().describe("Sprint ID"),
+      title: z.string().optional().describe("Human-readable sprint name, e.g. 'Cleanup & Polish'"),
+      goal: z.string().optional().describe("Sprint goal — what we're trying to achieve"),
+      pr_title: z.string().optional().describe("PR title to use when merging the sprint branch"),
+      pr_description: z.string().optional().describe("PR description / merge commit body"),
+    },
+  },
+  (args) => {
+    const patch: Parameters<typeof scrum.updateSprint>[1] = {};
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.goal !== undefined) patch.goal = args.goal;
+    if (args.pr_title !== undefined) patch.prTitle = args.pr_title;
+    if (args.pr_description !== undefined) patch.prDescription = args.pr_description;
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text" as const, text: "Specify at least one field to update" }], isError: true };
+    }
+    return safe(() => scrum.updateSprint(args.sprint_id, patch));
+  }
+);
+
+server.registerTool(
+  "scrum_update_issue",
+  {
+    description:
+      "Edit an issue after creation. Update title, description, priority, type, or story point estimate. At least one field must be provided.",
+    inputSchema: {
+      issue_id: z.number().int().describe("Issue ID"),
+      title: z.string().optional().describe("New title"),
+      description: z.string().optional().describe("New requirements body"),
+      priority: z.enum(["high", "medium", "low"]).optional().describe("New priority"),
+      type: z.enum(["feature", "bugfix", "refactor", "test", "docs"]).optional().describe("New type"),
+      story_points: z.number().int().min(1).max(13).optional().describe("New story point estimate"),
+    },
+  },
+  (args) => {
+    const patch: Parameters<typeof scrum.updateIssue>[1] = {};
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.description !== undefined) patch.description = args.description;
+    if (args.priority !== undefined) patch.priority = args.priority;
+    if (args.type !== undefined) patch.type = args.type;
+    if (args.story_points !== undefined) patch.storyPoints = args.story_points;
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text" as const, text: "Specify at least one field to update" }], isError: true };
+    }
+    return safe(() => scrum.updateIssue(args.issue_id, patch));
+  }
 );
 
 // ---------------------------------------------------------------------------

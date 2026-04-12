@@ -7,7 +7,7 @@
  *
  * Env:
  *   SCRUM_DB_PATH        — SQLite path (default: ./agentscrum.db)
- *   OBSIDIAN_VAULT_PATH  — vault root (default: ~/Orion/Claude-Workspace)
+ *   OBSIDIAN_VAULT_PATH  — vault root (default: ~/obsidian-vault)
  *
  * Writes:
  *   <vault>/projects/agentscrum/sprints/sprint-N.md
@@ -41,7 +41,7 @@ const sprintNumber = parseInt(sprintArg, 10);
 const projectId = projectArg ? parseInt(projectArg, 10) : 1;
 
 const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../agentscrum.db");
-const vaultRoot = process.env["OBSIDIAN_VAULT_PATH"] ?? path.join(os.homedir(), "Orion/Claude-Workspace");
+const vaultRoot = process.env["OBSIDIAN_VAULT_PATH"] ?? path.join(os.homedir(), "obsidian-vault");
 
 // ---------------------------------------------------------------------------
 // DB
@@ -95,7 +95,7 @@ if (!sprint) {
 
 const issues = db
   .prepare(`
-    SELECT i.*, e.title as epic_title
+    SELECT i.*, e.title as epic_title, e.number as epic_number
     FROM issues i
     JOIN epics e ON e.id = i.epic_id
     WHERE i.sprint_id = ?
@@ -103,16 +103,22 @@ const issues = db
   `)
   .all(sprint.id) as Array<{
   id: number;
+  number: number;
   title: string;
   status: string;
   priority: string;
   type: string;
   tokens_used: number;
   epic_title: string;
+  epic_number: number;
 }>;
 
+function formatKey(epicNum: number, issueNum: number): string {
+  return `E${String(epicNum).padStart(2, "0")}-I${String(issueNum).padStart(2, "0")}`;
+}
+
 const issueRows = issues
-  .map((i) => `| ${i.id} | ${i.title} | ${i.status} | ${i.priority} | ${i.tokens_used} |`)
+  .map((i) => `| ${formatKey(i.epic_number, i.number)} | ${i.title} | ${i.status} | ${i.priority} | ${i.tokens_used} |`)
   .join("\n");
 
 // Session log
@@ -137,7 +143,7 @@ const sessionSections = issues
       })
       .join("\n");
 
-    return `### ${issue.id}: ${issue.title}\n\n**ACs:**\n${acLines}\n\n**Sessions:**\n${sessionLines}`;
+    return `### ${formatKey(issue.epic_number, issue.number)}: ${issue.title}\n\n**ACs:**\n${acLines}\n\n**Sessions:**\n${sessionLines}`;
   })
   .filter(Boolean)
   .join("\n\n---\n\n");
@@ -157,8 +163,8 @@ ${sprint.goal ? `**Goal:** ${sprint.goal}\n` : ""}**Dates:** ${formatDate(sprint
 
 ## Issues
 
-| ID | Title | Status | Priority | Tokens |
-|----|-------|--------|----------|--------|
+| Key | Title | Status | Priority | Tokens |
+|-----|-------|--------|----------|--------|
 ${issueRows}
 
 **Total:** ${issues.length} issues
@@ -218,7 +224,7 @@ if (decisions.length === 0) console.log("  (no decisions to export)");
 // Lessons export
 // ---------------------------------------------------------------------------
 const lessons = db
-  .prepare("SELECT * FROM lessons WHERE project_id = ? OR project_id IS NULL ORDER BY id")
+  .prepare("SELECT * FROM lessons WHERE project_id = ? ORDER BY id")
   .all(projectId) as Array<{
   id: number;
   title: string;
