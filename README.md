@@ -108,7 +108,7 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 |------|-------------|
 | `scrum_init_project` | Create project + Sprint 1 |
 | `scrum_create_epic` | Create an epic |
-| `scrum_update_epic` | Rename an epic or change its status |
+| `scrum_update_epic` | Rename an epic |
 | `scrum_create_sprint` | Create next sprint (planning) |
 | `scrum_start_sprint` | Transition sprint → active |
 | `scrum_close_sprint` | Transition sprint → closed |
@@ -159,6 +159,7 @@ scrum project list                 # list all projects
 scrum <project> sprint list                     # all sprints with title + status
 scrum <project> sprint show <N>                 # full detail for sprint N
 scrum <project> sprint show <N> --verbose       # include issue descriptions
+scrum <project> sprint issues <N>               # list issues in sprint N (shorthand)
 scrum <project> sprint update <N> \
   [--title "Cleanup"] \
   [--goal "..."] \
@@ -171,11 +172,9 @@ scrum <project> status             # sprint summary + active issue + DoD
 scrum <project> status --json      # machine-readable JSON
 
 # ── Epics ────────────────────────────────────────────────────────────────
-scrum <project> epic list                       # E01, E02... with status
+scrum <project> epic list                       # E01, E02... (epics have no status)
 scrum <project> epic add <title>               # create a new epic
-scrum <project> epic edit <epic-id> \
-  [--title "New Name"] [--status active|complete|paused]
-scrum <project> epic status <epic-id> <status>
+scrum <project> epic edit <epic-id> --title "New Name"
 
 # ── Issues ───────────────────────────────────────────────────────────────
 scrum <project> issue list                      # E01-I01 keys, current sprint

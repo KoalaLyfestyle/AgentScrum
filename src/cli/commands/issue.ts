@@ -70,13 +70,23 @@ export function registerIssue(program: Command): void {
       try {
         const pid = requireProjectId();
         let sprint;
+        let historicalNote = "";
         if (opts.sprint !== undefined) {
           const n = parseInt(opts.sprint, 10);
           if (Number.isNaN(n)) throw new Error(`Invalid sprint number: "${opts.sprint}"`);
           sprint = getSprintByNumber(pid, n);
         } else {
-          sprint = getActiveSprint(pid);
+          try {
+            sprint = getActiveSprint(pid);
+          } catch {
+            // All sprints closed — fall back to the most recent one
+            const all = listSprints(pid);
+            if (all.length === 0) { console.log("No sprints found."); return; }
+            sprint = all[all.length - 1]!;
+            historicalNote = `(no active sprint — showing Sprint ${sprint.number})\n`;
+          }
         }
+        if (historicalNote) console.log(historicalNote);
         const issues = listIssues(sprint.id);
 
         if (opts.json) {

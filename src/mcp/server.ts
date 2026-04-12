@@ -333,22 +333,13 @@ server.registerTool(
 server.registerTool(
   "scrum_update_epic",
   {
-    description: "Rename an epic or change its status. Epics are thematic categories (e.g. 'CLI', 'MCP Server') — not sprint-named.",
+    description: "Rename an epic. Epics are thematic categories (e.g. 'CLI', 'MCP Server') that remain open indefinitely — they have no status.",
     inputSchema: {
       epic_id: z.number().int().describe("Epic ID"),
-      title: z.string().optional().describe("New epic title"),
-      status: z.enum(["active", "complete", "paused"]).optional().describe("New status"),
+      title: z.string().describe("New epic title"),
     },
   },
-  (args) => {
-    const patch: { title?: string; status?: "active" | "complete" | "paused" } = {};
-    if (args.title !== undefined) patch.title = args.title;
-    if (args.status !== undefined) patch.status = args.status;
-    if (Object.keys(patch).length === 0) {
-      return { content: [{ type: "text" as const, text: "Specify at least one field to update" }], isError: true };
-    }
-    return safe(() => scrum.updateEpic(args.epic_id, patch));
-  }
+  (args) => safe(() => scrum.updateEpic(args.epic_id, { title: args.title }))
 );
 
 server.registerTool(

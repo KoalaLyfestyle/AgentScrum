@@ -151,4 +151,45 @@ export function registerSprint(program: Command): void {
         process.exit(1);
       }
     });
+
+  sprint
+    .command("issues <sprint-number>")
+    .description("List all issues in a specific sprint")
+    .option("-V, --verbose", "Include description + ACs for each issue")
+    .option("--json", "Output as JSON")
+    .action((sprintNumber: string, opts: { verbose?: boolean; json?: boolean }) => {
+      try {
+        const pid = requireProjectId();
+        const sn = parseInt(sprintNumber, 10);
+        if (Number.isNaN(sn)) {
+          console.error(`Error: invalid sprint number "${sprintNumber}"`);
+          process.exit(1);
+        }
+        const sprintObj = getSprintByNumber(pid, sn);
+        const issues = listIssues(sprintObj.id);
+        if (opts.json) {
+          console.log(JSON.stringify({ sprint: sprintObj, issues }, null, 2));
+          return;
+        }
+        const label = sprintObj.title ? `Sprint ${sprintObj.number} — ${sprintObj.title}` : `Sprint ${sprintObj.number}`;
+        console.log(`${label}  [${sprintObj.status.toUpperCase()}]  ${issues.length} issue(s):\n`);
+        if (issues.length === 0) {
+          console.log("  (none)");
+          return;
+        }
+        const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
+        for (const i of issues) {
+          const epic = epicsMap.get(i.epicId);
+          const key = epic ? issueKey(epic.number, i.number) : `#${i.id}`;
+          const status = i.status.padEnd(11);
+          const pts = i.storyPoints ? ` [${i.storyPoints}pt]` : "";
+          console.log(`  ${key.padEnd(8)} [${status}]${pts} ${i.title}`);
+          if (opts.verbose && i.description) console.log(`           ${i.description}`);
+        }
+        console.log();
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
 }
