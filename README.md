@@ -51,8 +51,10 @@ scrum init myproject
 # 6. Register the MCP server with Claude Code
 claude mcp add agentscrum \
   -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
-  -- node_modules/.bin/tsx /absolute/path/to/src/mcp/server.ts
+  -- /absolute/path/to/node_modules/.bin/tsx /absolute/path/to/src/mcp/server.ts
 ```
+
+> `tsx` is a dev dependency — it's available at `node_modules/.bin/tsx` after `npm install`. No separate global install needed. Use the **absolute path** to the binary since Claude Code may not inherit your shell's `PATH`.
 
 Once registered, all 23 MCP tools are available in every Claude Code session.
 

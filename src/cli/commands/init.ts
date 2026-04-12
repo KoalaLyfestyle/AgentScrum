@@ -34,6 +34,14 @@ export function registerInit(program: Command): void {
         console.log(`Project created: ${project.name} (id: ${project.id})`);
         console.log(`Sprint 1 created (id: ${sprint.id}, status: ${sprint.status})`);
 
+        if (!process.env["SCRUM_DB_PATH"]) {
+          const absPath = `${process.cwd()}/agentscrum.db`;
+          console.warn(`\nWarning: SCRUM_DB_PATH is not set — using relative path './agentscrum.db'.`);
+          console.warn(`CLI commands run from other directories will not find this database.`);
+          console.warn(`Set it once in your shell profile:`);
+          console.warn(`  export SCRUM_DB_PATH=${absPath}\n`);
+        }
+
         console.log(`\nDefinition of Done — enter items one at a time, blank line to finish:`);
         const dodItems = await promptDod();
         if (dodItems.length > 0) {

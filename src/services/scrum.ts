@@ -532,33 +532,35 @@ export function logSession(
 ): Session {
   const db = getDb();
 
-  const session = db
-    .insert(schema.sessions)
-    .values({
-      issueId,
-      date: today(),
-      summary,
-      tokensUsed,
-      auditor: auditor ?? null,
-    })
-    .returning()
-    .get();
-  if (!session) throw new Error("Failed to log session");
+  return db.transaction((tx) => {
+    const session = tx
+      .insert(schema.sessions)
+      .values({
+        issueId,
+        date: today(),
+        summary,
+        tokensUsed,
+        auditor: auditor ?? null,
+      })
+      .returning()
+      .get();
+    if (!session) throw new Error("Failed to log session");
 
-  // Increment tokens on the issue
-  const issueRow = db
-    .select()
-    .from(schema.issues)
-    .where(eq(schema.issues.id, issueId))
-    .get();
-  if (issueRow) {
-    db.update(schema.issues)
-      .set({ tokensUsed: issueRow.tokensUsed + tokensUsed })
+    // Atomically increment tokens on the issue
+    const issueRow = tx
+      .select()
+      .from(schema.issues)
       .where(eq(schema.issues.id, issueId))
-      .run();
-  }
+      .get();
+    if (issueRow) {
+      tx.update(schema.issues)
+        .set({ tokensUsed: issueRow.tokensUsed + tokensUsed })
+        .where(eq(schema.issues.id, issueId))
+        .run();
+    }
 
-  return session as Session;
+    return session as Session;
+  });
 }
 
 // --- Work package ---
@@ -638,8 +640,10 @@ export function removeDodItem(id: number): void {
 
 export function setDod(projectId: number, items: string[]): DodItem[] {
   const db = getDb();
-  db.delete(schema.projectDod).where(eq(schema.projectDod.projectId, projectId)).run();
-  return items.map((text, i) => addDodItem(projectId, text, i));
+  return db.transaction((tx) => {
+    tx.delete(schema.projectDod).where(eq(schema.projectDod.projectId, projectId)).run();
+    return items.map((text, i) => addDodItem(projectId, text, i));
+  });
 }
 
 // --- Knowledge layer ---
