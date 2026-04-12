@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { createEpic, listEpics, updateEpic, updateEpicStatus } from "../../services/scrum.js";
+import { createEpic, listEpics, updateEpic, updateEpicStatus, epicKey } from "../../services/scrum.js";
 import type { EpicStatus } from "../../schema/types.js";
 import { requireProjectId } from "../projectContext.js";
 
@@ -27,7 +27,7 @@ export function registerEpic(program: Command): void {
         console.log(`Epics (${epics.length}):\n`);
         for (const e of epics) {
           const status = e.status.padEnd(8);
-          console.log(`  #${e.id}  [${status}]  ${e.title}`);
+          console.log(`  ${epicKey(e.number)}  [${status}]  ${e.title}`);
         }
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -56,7 +56,7 @@ export function registerEpic(program: Command): void {
           process.exit(1);
         }
         const updated = updateEpic(parseInt(epicId, 10), patch);
-        console.log(`Epic #${updated.id} updated: ${updated.title}  [${updated.status}]`);
+        console.log(`${epicKey(updated.number)} updated: ${updated.title}  [${updated.status}]`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
@@ -69,7 +69,7 @@ export function registerEpic(program: Command): void {
     .action((projectId: string, title: string) => {
       try {
         const created = createEpic(parseInt(projectId, 10), title);
-        console.log(`Epic created: #${created.id} — ${created.title}`);
+        console.log(`Epic created: ${epicKey(created.number)} — ${created.title}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
@@ -86,7 +86,7 @@ export function registerEpic(program: Command): void {
           process.exit(1);
         }
         const updated = updateEpicStatus(parseInt(epicId, 10), status as EpicStatus);
-        console.log(`Epic #${updated.id} status → ${updated.status}`);
+        console.log(`${epicKey(updated.number)} status → ${updated.status}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

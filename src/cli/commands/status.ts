@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { getActiveSprint, getSprintSummary, listDod } from "../../services/scrum.js";
+import { getActiveSprint, getSprintSummary, listDod, listEpics, issueKey } from "../../services/scrum.js";
 import { requireProjectId } from "../projectContext.js";
 
 export function registerStatus(program: Command): void {
@@ -32,7 +32,10 @@ export function registerStatus(program: Command): void {
         }
 
         if (summary.activeIssue) {
-          console.log(`\nActive: #${summary.activeIssue.id} — ${summary.activeIssue.title}`);
+          const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
+          const epic = epicsMap.get(summary.activeIssue.epicId);
+          const key = epic ? issueKey(epic.number, summary.activeIssue.number) : `#${summary.activeIssue.id}`;
+          console.log(`\nActive: ${key} — ${summary.activeIssue.title}`);
         }
 
         if (dod.length > 0) {

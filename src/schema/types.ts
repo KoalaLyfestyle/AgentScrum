@@ -18,6 +18,7 @@ export interface Project {
 export interface Epic {
   id: number;
   projectId: number;
+  number: number; // sequential per project; display as E01, E02, ...
   title: string;
   status: EpicStatus;
   createdAt: string;
@@ -47,6 +48,7 @@ export interface Issue {
   id: number;
   epicId: number;
   sprintId: number;
+  number: number; // sequential per epic; display as E01-I01, E01-I02, ...
   title: string;
   description?: string;
   type: IssueType;

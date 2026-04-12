@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import {
   createIssue,
   listIssues,
+  listEpics,
   updateIssue,
   updateIssueStatus,
   getIssueDetail,
@@ -9,6 +10,8 @@ import {
   getSprintByNumber,
   listSprints,
   addAc,
+  epicKey,
+  issueKey,
 } from "../../services/scrum.js";
 import type { IssueDetail, IssueStatus, IssueType, Priority } from "../../schema/types.js";
 import { requireProjectId } from "../projectContext.js";
@@ -40,10 +43,15 @@ export function registerIssue(program: Command): void {
           process.exit(1);
         }
         const storyPoints = opts.points ? parseInt(opts.points, 10) : undefined;
-        const sprint = getActiveSprint(requireProjectId());
+        const pid = requireProjectId();
+        const sprint = getActiveSprint(pid);
         const created = createIssue(parseInt(epicId, 10), sprint.id, title, type, priority, opts.description, storyPoints);
-        console.log(`Issue created: #${created.id} — ${created.title}`);
-        console.log(`  Epic: ${created.epicId} | Sprint: ${created.sprintId} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
+        const epics = listEpics(pid);
+        const epic = epics.find((e) => e.id === created.epicId);
+        const key = epic ? issueKey(epic.number, created.number) : `#${created.id}`;
+        const epicLabel = epic ? `${epicKey(epic.number)} ${epic.title}` : String(created.epicId);
+        console.log(`Issue created: ${key} — ${created.title}`);
+        console.log(`  Epic: ${epicLabel} | Sprint: ${created.sprintId} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
         if (created.description) console.log(`  Description: ${created.description}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -76,19 +84,21 @@ export function registerIssue(program: Command): void {
           console.log(`No issues in Sprint ${sprint.number}`);
           return;
         }
+        const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
         const sprintLabel = sprint.title ? `Sprint ${sprint.number} — ${sprint.title}` : `Sprint ${sprint.number}`;
         console.log(`${sprintLabel} — ${issues.length} issue(s):\n`);
-        const padId = String(Math.max(...issues.map((i) => i.id))).length + 1;
         for (const i of issues) {
+          const epic = epicsMap.get(i.epicId);
+          const key = epic ? issueKey(epic.number, i.number) : `#${i.id}`;
           const status = i.status.padEnd(11);
           const priority = i.priority.padEnd(7);
           const pts = i.storyPoints ? ` [${i.storyPoints}pt]` : "";
-          console.log(`  #${String(i.id).padStart(padId)} [${status}] [${priority}]${pts} ${i.title}`);
+          console.log(`  ${key.padEnd(8)} [${status}] [${priority}]${pts} ${i.title}`);
           if (opts.full || opts.verbose) {
-            if (i.description) console.log(`         ${i.description}`);
+            if (i.description) console.log(`           ${i.description}`);
             const detail = getIssueDetail(i.id);
             for (const ac of detail.acs) {
-              console.log(`         ${ac.completed ? "[x]" : "[ ]"} ${ac.text}`);
+              console.log(`           ${ac.completed ? "[x]" : "[ ]"} ${ac.text}`);
             }
           }
         }
@@ -108,7 +118,7 @@ export function registerIssue(program: Command): void {
           process.exit(1);
         }
         const updated = updateIssueStatus(parseInt(issueId, 10), status as IssueStatus);
-        console.log(`Issue #${updated.id} status → ${updated.status}`);
+        console.log(`Issue ${updated.id} status → ${updated.status}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
@@ -120,8 +130,12 @@ export function registerIssue(program: Command): void {
     .description("Show full issue detail including ACs and session history")
     .action((issueId: string) => {
       try {
+        const pid = requireProjectId();
         const detail = getIssueDetail(parseInt(issueId, 10));
-        console.log(`\nIssue #${detail.id}: ${detail.title}`);
+        const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
+        const epic = epicsMap.get(detail.epicId);
+        const key = epic ? issueKey(epic.number, detail.number) : `#${detail.id}`;
+        console.log(`\n${key}: ${detail.title}`);
         console.log(`  Status: ${detail.status} | Type: ${detail.type} | Priority: ${detail.priority}`);
         if (detail.assignedTo) console.log(`  Assigned: ${detail.assignedTo}`);
         console.log(`  Tokens used: ${detail.tokensUsed}`);
@@ -196,7 +210,7 @@ export function registerIssue(program: Command): void {
           process.exit(1);
         }
         const updated = updateIssue(parseInt(issueId, 10), patch);
-        console.log(`Issue #${updated.id} updated: ${updated.title}`);
+        console.log(`Issue ${updated.id} updated: ${updated.title}`);
         console.log(`  Status: ${updated.status} | Type: ${updated.type} | Priority: ${updated.priority}${updated.storyPoints ? ` | Points: ${updated.storyPoints}` : ""}`);
         if (updated.description) console.log(`  Description: ${updated.description}`);
       } catch (err) {

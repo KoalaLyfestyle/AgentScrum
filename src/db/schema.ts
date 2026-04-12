@@ -12,6 +12,7 @@ export const epics = sqliteTable("epics", {
   projectId: integer("project_id", { mode: "number" })
     .notNull()
     .references(() => projects.id),
+  number: integer("number", { mode: "number" }).notNull().default(0), // sequential per project; set on insert
   title: text("title").notNull(),
   status: text("status", { enum: ["active", "complete", "paused"] })
     .notNull()
@@ -44,6 +45,7 @@ export const issues = sqliteTable("issues", {
   sprintId: integer("sprint_id", { mode: "number" })
     .notNull()
     .references(() => sprints.id),
+  number: integer("number", { mode: "number" }).notNull().default(0), // sequential per epic; set on insert
   title: text("title").notNull(),
   description: text("description"),
   type: text("type", {

@@ -99,6 +99,18 @@ export function listProjects(): Project[] {
   return db.select().from(schema.projects).all() as Project[];
 }
 
+// --- Display key helpers ---
+
+/** Returns the display key for an epic, e.g. "E01" */
+export function epicKey(epicNumber: number): string {
+  return `E${String(epicNumber).padStart(2, "0")}`;
+}
+
+/** Returns the display key for an issue, e.g. "E01-I05" */
+export function issueKey(epicNumber: number, issueNumber: number): string {
+  return `${epicKey(epicNumber)}-I${String(issueNumber).padStart(2, "0")}`;
+}
+
 // --- Epics ---
 
 export function listEpics(projectId: number): Epic[] {
@@ -112,9 +124,10 @@ export function listEpics(projectId: number): Epic[] {
 
 export function createEpic(projectId: number, title: string): Epic {
   const db = getDb();
+  const existingCount = db.select().from(schema.epics).where(eq(schema.epics.projectId, projectId)).all().length;
   const epic = db
     .insert(schema.epics)
-    .values({ projectId, title, status: "active", createdAt: now() })
+    .values({ projectId, number: existingCount + 1, title, status: "active", createdAt: now() })
     .returning()
     .get();
   if (!epic) throw new Error("Failed to create epic");
@@ -298,11 +311,13 @@ export function createIssue(
   storyPoints?: number
 ): Issue {
   const db = getDb();
+  const existingCount = db.select().from(schema.issues).where(eq(schema.issues.epicId, epicId)).all().length;
   const issue = db
     .insert(schema.issues)
     .values({
       epicId,
       sprintId,
+      number: existingCount + 1,
       title,
       description: description ?? null,
       type,

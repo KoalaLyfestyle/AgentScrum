@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { listSprints, listIssues, updateSprint, getVelocity, getSprintByNumber } from "../../services/scrum.js";
+import { listSprints, listIssues, listEpics, updateSprint, getVelocity, getSprintByNumber, issueKey } from "../../services/scrum.js";
 import { requireProjectId } from "../projectContext.js";
 
 export function registerSprint(program: Command): void {
@@ -99,12 +99,14 @@ export function registerSprint(program: Command): void {
         if (issues.length === 0) {
           console.log("  (none)");
         } else {
-          const padId = String(Math.max(...issues.map((i) => i.id))).length + 1;
+          const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
           for (const i of issues) {
+            const epic = epicsMap.get(i.epicId);
+            const key = epic ? issueKey(epic.number, i.number) : `#${i.id}`;
             const status = i.status.padEnd(11);
             const pts = i.storyPoints ? ` [${i.storyPoints}pt]` : "";
-            console.log(`  #${String(i.id).padStart(padId)} [${status}]${pts} ${i.title}`);
-            if (opts.verbose && i.description) console.log(`         ${i.description}`);
+            console.log(`  ${key.padEnd(8)} [${status}]${pts} ${i.title}`);
+            if (opts.verbose && i.description) console.log(`           ${i.description}`);
           }
         }
         console.log();
