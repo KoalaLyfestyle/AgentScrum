@@ -69,9 +69,14 @@ export function registerIssue(program: Command): void {
     .action((opts: { sprint?: string; full?: boolean; verbose?: boolean; json?: boolean }) => {
       try {
         const pid = requireProjectId();
-        const sprint = opts.sprint
-          ? getSprintByNumber(pid, parseInt(opts.sprint, 10))
-          : getActiveSprint(pid);
+        let sprint;
+        if (opts.sprint !== undefined) {
+          const n = parseInt(opts.sprint, 10);
+          if (Number.isNaN(n)) throw new Error(`Invalid sprint number: "${opts.sprint}"`);
+          sprint = getSprintByNumber(pid, n);
+        } else {
+          sprint = getActiveSprint(pid);
+        }
         const issues = listIssues(sprint.id);
 
         if (opts.json) {
@@ -204,7 +209,14 @@ export function registerIssue(program: Command): void {
           }
           patch.type = opts.type as IssueType;
         }
-        if (opts.points !== undefined) patch.storyPoints = parseInt(opts.points, 10);
+        if (opts.points !== undefined) {
+          const pts = parseInt(opts.points, 10);
+          if (Number.isNaN(pts) || pts < 1 || pts > 13) {
+            console.error("Error: --points must be a Fibonacci number between 1 and 13 (1,2,3,5,8,13)");
+            process.exit(1);
+          }
+          patch.storyPoints = pts;
+        }
         if (Object.keys(patch).length === 0) {
           console.error("Error: specify at least one field to update (--title, --description, --priority, --type, --points)");
           process.exit(1);

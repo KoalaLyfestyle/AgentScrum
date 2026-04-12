@@ -364,15 +364,17 @@ server.registerTool(
       pr_description: z.string().optional().describe("PR description / merge commit body"),
     },
   },
-  (args) =>
-    safe(() =>
-      scrum.updateSprint(args.sprint_id, {
-        title: args.title,
-        goal: args.goal,
-        prTitle: args.pr_title,
-        prDescription: args.pr_description,
-      })
-    )
+  (args) => {
+    const patch: Parameters<typeof scrum.updateSprint>[1] = {};
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.goal !== undefined) patch.goal = args.goal;
+    if (args.pr_title !== undefined) patch.prTitle = args.pr_title;
+    if (args.pr_description !== undefined) patch.prDescription = args.pr_description;
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text" as const, text: "Specify at least one field to update" }], isError: true };
+    }
+    return safe(() => scrum.updateSprint(args.sprint_id, patch));
+  }
 );
 
 server.registerTool(

@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type {
   Project,
@@ -119,15 +119,18 @@ export function listEpics(projectId: number): Epic[] {
     .select()
     .from(schema.epics)
     .where(eq(schema.epics.projectId, projectId))
+    .orderBy(schema.epics.number)
     .all() as Epic[];
 }
 
 export function createEpic(projectId: number, title: string): Epic {
   const db = getDb();
-  const existingCount = db.select().from(schema.epics).where(eq(schema.epics.projectId, projectId)).all().length;
+  const rows = db.select({ maxNum: schema.epics.number }).from(schema.epics)
+    .where(eq(schema.epics.projectId, projectId)).all();
+  const nextNumber = rows.length === 0 ? 1 : Math.max(...rows.map((r) => r.maxNum)) + 1;
   const epic = db
     .insert(schema.epics)
-    .values({ projectId, number: existingCount + 1, title, status: "active", createdAt: now() })
+    .values({ projectId, number: nextNumber, title, status: "active", createdAt: now() })
     .returning()
     .get();
   if (!epic) throw new Error("Failed to create epic");
@@ -187,6 +190,7 @@ export function listSprints(projectId: number): Sprint[] {
     .select()
     .from(schema.sprints)
     .where(eq(schema.sprints.projectId, projectId))
+    .orderBy(schema.sprints.number)
     .all() as Sprint[];
 }
 
@@ -311,13 +315,15 @@ export function createIssue(
   storyPoints?: number
 ): Issue {
   const db = getDb();
-  const existingCount = db.select().from(schema.issues).where(eq(schema.issues.epicId, epicId)).all().length;
+  const rows = db.select({ maxNum: schema.issues.number }).from(schema.issues)
+    .where(eq(schema.issues.epicId, epicId)).all();
+  const nextNumber = rows.length === 0 ? 1 : Math.max(...rows.map((r) => r.maxNum)) + 1;
   const issue = db
     .insert(schema.issues)
     .values({
       epicId,
       sprintId,
-      number: existingCount + 1,
+      number: nextNumber,
       title,
       description: description ?? null,
       type,
@@ -374,9 +380,13 @@ export function getBacklog(projectId: number): Issue[] {
     .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
     .all();
   if (planningSprints.length === 0) return [];
-  const sprintIds = planningSprints.map((s) => s.id);
-  const issues = db.select().from(schema.issues).all() as Issue[];
-  return issues.filter((i) => sprintIds.includes(i.sprintId));
+  const backlogRows = db
+    .select()
+    .from(schema.issues)
+    .innerJoin(schema.sprints, eq(schema.issues.sprintId, schema.sprints.id))
+    .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
+    .all();
+  return backlogRows.map((row) => row.issues as Issue);
 }
 
 export function getVelocity(projectId: number): SprintVelocity[] {

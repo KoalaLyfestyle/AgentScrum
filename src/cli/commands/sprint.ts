@@ -44,10 +44,15 @@ export function registerSprint(program: Command): void {
     .option("--json", "Output updated sprint as JSON")
     .action((sprintNumber: string, opts: { title?: string; goal?: string; prTitle?: string; prDesc?: string; json?: boolean }) => {
       try {
+        const n = parseInt(sprintNumber, 10);
+        if (Number.isNaN(n)) {
+          console.error(`Error: invalid sprint number "${sprintNumber}"`);
+          process.exit(1);
+        }
         const allSprints = listSprints(requireProjectId());
-        const sprint = allSprints.find((s) => s.number === parseInt(sprintNumber, 10));
+        const sprint = allSprints.find((s) => s.number === n);
         if (!sprint) {
-          console.error(`Sprint ${sprintNumber} not found`);
+          console.error(`Sprint ${n} not found`);
           process.exit(1);
         }
         const patch: Parameters<typeof updateSprint>[1] = {};
@@ -83,7 +88,12 @@ export function registerSprint(program: Command): void {
     .action((sprintNumber: string, opts: { verbose?: boolean; json?: boolean }) => {
       try {
         const pid = requireProjectId();
-        const sprint = getSprintByNumber(pid, parseInt(sprintNumber, 10));
+        const sn = parseInt(sprintNumber, 10);
+        if (Number.isNaN(sn)) {
+          console.error(`Error: invalid sprint number "${sprintNumber}"`);
+          process.exit(1);
+        }
+        const sprint = getSprintByNumber(pid, sn);
         const issues = listIssues(sprint.id);
         if (opts.json) {
           console.log(JSON.stringify({ sprint, issues }, null, 2));

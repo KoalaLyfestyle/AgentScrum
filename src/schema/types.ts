@@ -11,7 +11,7 @@ export type AuditorVerdict = "pass" | "fail" | "skipped";
 export interface Project {
   id: number;
   name: string;
-  directory?: string; // absolute path set at init time; used for CWD-based auto-detection
+  directory?: string | null; // absolute path set at init time; used for CWD-based auto-detection
   createdAt: string; // ISO 8601
 }
 

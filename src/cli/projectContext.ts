@@ -22,5 +22,10 @@ export function requireProjectId(): number {
     );
     process.exit(1);
   }
-  return parseInt(raw, 10);
+  const id = parseInt(raw, 10);
+  if (Number.isNaN(id)) {
+    console.error(`Error: SCRUM_PROJECT_ID must be a valid integer, got "${raw}".`);
+    process.exit(1);
+  }
+  return id;
 }
