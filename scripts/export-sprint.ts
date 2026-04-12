@@ -7,7 +7,7 @@
  *
  * Env:
  *   SCRUM_DB_PATH        — SQLite path (default: ./agentscrum.db)
- *   OBSIDIAN_VAULT_PATH  — vault root (default: ~/Orion/Claude-Workspace)
+ *   OBSIDIAN_VAULT_PATH  — vault root (default: ~/obsidian-vault)
  *
  * Writes:
  *   <vault>/projects/agentscrum/sprints/sprint-N.md
@@ -41,7 +41,7 @@ const sprintNumber = parseInt(sprintArg, 10);
 const projectId = projectArg ? parseInt(projectArg, 10) : 1;
 
 const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../agentscrum.db");
-const vaultRoot = process.env["OBSIDIAN_VAULT_PATH"] ?? path.join(os.homedir(), "Orion/Claude-Workspace");
+const vaultRoot = process.env["OBSIDIAN_VAULT_PATH"] ?? path.join(os.homedir(), "obsidian-vault");
 
 // ---------------------------------------------------------------------------
 // DB

@@ -36,13 +36,13 @@ function today(): string {
 
 // --- Projects ---
 
-export function initProject(name: string): { project: Project; sprint: Sprint } {
+export function initProject(name: string, directory?: string): { project: Project; sprint: Sprint } {
   const db = getDb();
   const createdAt = now();
 
   const project = db
     .insert(schema.projects)
-    .values({ name, createdAt })
+    .values({ name, directory: directory ?? null, createdAt })
     .returning()
     .get();
 
@@ -80,6 +80,20 @@ export function findProject(nameOrId: string): Project {
   return project as Project;
 }
 
+export function findProjectByDirectory(directory: string): Project | undefined {
+  const db = getDb();
+  // Walk up from the given directory checking each level against stored project directories
+  const projects = db.select().from(schema.projects).all() as Project[];
+  // Exact match first
+  const exact = projects.find((p) => p.directory === directory);
+  if (exact) return exact;
+  // Then check if the given directory is inside a registered project directory
+  for (const p of projects) {
+    if (p.directory && directory.startsWith(p.directory + "/")) return p;
+  }
+  return undefined;
+}
+
 export function listProjects(): Project[] {
   const db = getDb();
   return db.select().from(schema.projects).all() as Project[];
@@ -104,6 +118,21 @@ export function createEpic(projectId: number, title: string): Epic {
     .returning()
     .get();
   if (!epic) throw new Error("Failed to create epic");
+  return epic as Epic;
+}
+
+export function updateEpic(
+  epicId: number,
+  patch: { title?: string; status?: EpicStatus }
+): Epic {
+  const db = getDb();
+  const epic = db
+    .update(schema.epics)
+    .set(patch)
+    .where(eq(schema.epics.id, epicId))
+    .returning()
+    .get();
+  if (!epic) throw new Error(`Epic ${epicId} not found`);
   return epic as Epic;
 }
 
@@ -368,6 +397,17 @@ export function listIssues(sprintId: number): Issue[] {
     .from(schema.issues)
     .where(eq(schema.issues.sprintId, sprintId))
     .all() as Issue[];
+}
+
+export function getSprintByNumber(projectId: number, sprintNumber: number): Sprint {
+  const db = getDb();
+  const sprint = db
+    .select()
+    .from(schema.sprints)
+    .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.number, sprintNumber)))
+    .get();
+  if (!sprint) throw new Error(`Sprint ${sprintNumber} not found for this project`);
+  return sprint as Sprint;
 }
 
 export function updateIssueStatus(issueId: number, status: IssueStatus): Issue {

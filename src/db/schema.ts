@@ -3,6 +3,7 @@ import { sqliteTable, integer, text, real } from "drizzle-orm/sqlite-core";
 export const projects = sqliteTable("projects", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
+  directory: text("directory"), // absolute path to project root; used for CWD-based auto-detection
   createdAt: text("created_at").notNull(),
 });
 

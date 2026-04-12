@@ -9,7 +9,7 @@ import { registerStatus } from "./commands/status.js";
 import { registerLog } from "./commands/log.js";
 import { registerDod } from "./commands/dod.js";
 import { registerBacklog } from "./commands/backlog.js";
-import { findProject } from "../services/scrum.js";
+import { findProject, findProjectByDirectory } from "../services/scrum.js";
 
 // ---------------------------------------------------------------------------
 // Project resolution
@@ -25,6 +25,7 @@ const RESERVED = new Set([
 
 const firstArg = process.argv[2];
 if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
+  // Explicit project name/id passed — resolve it
   try {
     const project = findProject(firstArg);
     process.env["SCRUM_PROJECT_ID"] = String(project.id);
@@ -32,6 +33,17 @@ if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
+  }
+} else if (!process.env["SCRUM_PROJECT_ID"]) {
+  // No explicit project and no env var — try CWD detection
+  try {
+    const detected = findProjectByDirectory(process.cwd());
+    if (detected) {
+      process.env["SCRUM_PROJECT_ID"] = String(detected.id);
+    }
+    // If not detected, commands that need a project will show a helpful error at runtime
+  } catch {
+    // DB not set up yet — commands that need a project will handle this
   }
 }
 

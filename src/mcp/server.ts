@@ -66,17 +66,6 @@ server.registerTool(
 );
 
 server.registerTool(
-  "scrum_get_sprint_summary",
-  {
-    description: "Get issue count breakdown by status for a sprint.",
-    inputSchema: {
-      sprint_id: z.number().int().describe("Sprint ID"),
-    },
-  },
-  (args) => safe(() => scrum.getSprintSummary(args.sprint_id))
-);
-
-server.registerTool(
   "scrum_get_issue_detail",
   {
     description:
@@ -94,7 +83,7 @@ server.registerTool(
     description: "Get all issues assigned to a specific agent in the current sprint.",
     inputSchema: {
       project_id: z.number().int().describe("Project ID"),
-      agent_id: z.string().describe("Agent identifier (e.g. 'builder', 'auditor', 'orion')"),
+      agent_id: z.string().describe("Agent identifier (e.g. 'pm', 'builder', 'auditor')"),
     },
   },
   (args) =>
@@ -213,7 +202,7 @@ server.registerTool(
 server.registerTool(
   "scrum_assign_issue",
   {
-    description: "Assign an issue to an agent. Use the agent's identifier (e.g. 'builder', 'orion').",
+    description: "Assign an issue to an agent. Use the agent's identifier (e.g. 'pm', 'builder', 'auditor').",
     inputSchema: {
       issue_id: z.number().int().describe("Issue ID"),
       agent_id: z.string().describe("Agent identifier"),
@@ -342,6 +331,27 @@ server.registerTool(
 // ---------------------------------------------------------------------------
 
 server.registerTool(
+  "scrum_update_epic",
+  {
+    description: "Rename an epic or change its status. Epics are thematic categories (e.g. 'CLI', 'MCP Server') — not sprint-named.",
+    inputSchema: {
+      epic_id: z.number().int().describe("Epic ID"),
+      title: z.string().optional().describe("New epic title"),
+      status: z.enum(["active", "complete", "paused"]).optional().describe("New status"),
+    },
+  },
+  (args) => {
+    const patch: { title?: string; status?: "active" | "complete" | "paused" } = {};
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.status !== undefined) patch.status = args.status;
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text" as const, text: "Specify at least one field to update" }], isError: true };
+    }
+    return safe(() => scrum.updateEpic(args.epic_id, patch));
+  }
+);
+
+server.registerTool(
   "scrum_update_sprint",
   {
     description:
@@ -391,65 +401,6 @@ server.registerTool(
     }
     return safe(() => scrum.updateIssue(args.issue_id, patch));
   }
-);
-
-// ---------------------------------------------------------------------------
-// READ TOOLS — backlog + velocity + lists
-// ---------------------------------------------------------------------------
-
-server.registerTool(
-  "scrum_list_projects",
-  {
-    description: "List all projects in the database.",
-    inputSchema: {},
-  },
-  () => safe(() => scrum.listProjects())
-);
-
-server.registerTool(
-  "scrum_list_sprints",
-  {
-    description: "List all sprints for a project with their status, title, and goal.",
-    inputSchema: {
-      project_id: z.number().int().describe("Project ID"),
-    },
-  },
-  (args) => safe(() => scrum.listSprints(args.project_id))
-);
-
-server.registerTool(
-  "scrum_list_epics",
-  {
-    description: "List all epics for a project.",
-    inputSchema: {
-      project_id: z.number().int().describe("Project ID"),
-    },
-  },
-  (args) => safe(() => scrum.listEpics(args.project_id))
-);
-
-server.registerTool(
-  "scrum_get_backlog",
-  {
-    description:
-      "Get all backlog issues for a project — issues in planning sprints that haven't been started yet. Use during sprint planning to decide what goes into the next sprint.",
-    inputSchema: {
-      project_id: z.number().int().describe("Project ID"),
-    },
-  },
-  (args) => safe(() => scrum.getBacklog(args.project_id))
-);
-
-server.registerTool(
-  "scrum_get_velocity",
-  {
-    description:
-      "Get story point velocity per closed sprint. Returns completed story points and issue count per sprint. Use to calibrate capacity estimates for upcoming sprints.",
-    inputSchema: {
-      project_id: z.number().int().describe("Project ID"),
-    },
-  },
-  (args) => safe(() => scrum.getVelocity(args.project_id))
 );
 
 // ---------------------------------------------------------------------------

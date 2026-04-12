@@ -30,7 +30,7 @@ export function registerInit(program: Command): void {
     .description("Initialize a new AgentScrum project with Sprint 1")
     .action(async (projectName: string) => {
       try {
-        const { project, sprint } = initProject(projectName);
+        const { project, sprint } = initProject(projectName, process.cwd());
         console.log(`Project created: ${project.name} (id: ${project.id})`);
         console.log(`Sprint 1 created (id: ${sprint.id}, status: ${sprint.status})`);
 
@@ -45,14 +45,21 @@ export function registerInit(program: Command): void {
 
         console.log(`
 ────────────────────────────────────────────────────────
-Add this to your project's CLAUDE.md to wire up the MCP:
+Add this to your project's CLAUDE.md to wire up AgentScrum:
 
-Start every session as PM. Read these in order before any work:
-1. ORION.md — project context and constraints
-2. /path/to/config/workflow/pm.md — PM role instructions
-3. Call \`scrum_get_work_package {project_id: ${project.id}, capacity: <N>}\` — sprint state + DoD + fully-briefed issues in one shot
+# ${project.name}
 
-Then follow the PM → [Researcher] → Builder → Auditor → PM loop.
+## AgentScrum
+At the start of every session, call:
+  scrum_get_work_package { project_id: ${project.id}, capacity: <story_points> }
+
+This returns your sprint goal, Definition of Done, and fully-briefed
+issues (with ACs) in one call — no follow-up reads needed.
+
+After completing each issue:
+1. Mark it done: scrum_update_issue_status { issue_id: <id>, status: "done" }
+2. Log the session: scrum_log_session { issue_id: <id>, summary: "..." }
+3. Check off DoD items before moving to the next issue.
 ────────────────────────────────────────────────────────
 `);
       } catch (err) {

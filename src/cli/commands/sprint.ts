@@ -1,14 +1,6 @@
 import type { Command } from "commander";
-import { listSprints, updateSprint, getVelocity } from "../../services/scrum.js";
-
-function projectId(): number {
-  const raw = process.env["SCRUM_PROJECT_ID"];
-  if (!raw) {
-    console.error("Error: SCRUM_PROJECT_ID env var is required (use 'scrum <project> sprint ...')");
-    process.exit(1);
-  }
-  return parseInt(raw, 10);
-}
+import { listSprints, listIssues, updateSprint, getVelocity, getSprintByNumber } from "../../services/scrum.js";
+import { requireProjectId } from "../projectContext.js";
 
 export function registerSprint(program: Command): void {
   const sprint = program.command("sprint").description("Manage sprints");
@@ -19,7 +11,7 @@ export function registerSprint(program: Command): void {
     .option("--json", "Output as JSON")
     .action((opts: { json?: boolean }) => {
       try {
-        const sprints = listSprints(projectId());
+        const sprints = listSprints(requireProjectId());
         if (opts.json) {
           console.log(JSON.stringify(sprints, null, 2));
           return;
@@ -52,7 +44,7 @@ export function registerSprint(program: Command): void {
     .option("--json", "Output updated sprint as JSON")
     .action((sprintNumber: string, opts: { title?: string; goal?: string; prTitle?: string; prDesc?: string; json?: boolean }) => {
       try {
-        const allSprints = listSprints(projectId());
+        const allSprints = listSprints(requireProjectId());
         const sprint = allSprints.find((s) => s.number === parseInt(sprintNumber, 10));
         if (!sprint) {
           console.error(`Sprint ${sprintNumber} not found`);
@@ -84,12 +76,51 @@ export function registerSprint(program: Command): void {
     });
 
   sprint
+    .command("show <sprint-number>")
+    .description("Show full detail for a specific sprint: status, goal, all issues")
+    .option("-V, --verbose", "Include issue descriptions")
+    .option("--json", "Output as JSON")
+    .action((sprintNumber: string, opts: { verbose?: boolean; json?: boolean }) => {
+      try {
+        const pid = requireProjectId();
+        const sprint = getSprintByNumber(pid, parseInt(sprintNumber, 10));
+        const issues = listIssues(sprint.id);
+        if (opts.json) {
+          console.log(JSON.stringify({ sprint, issues }, null, 2));
+          return;
+        }
+        const label = sprint.title ? `Sprint ${sprint.number} — ${sprint.title}` : `Sprint ${sprint.number}`;
+        console.log(`\n${label}  [${sprint.status.toUpperCase()}]`);
+        if (sprint.goal) console.log(`Goal: ${sprint.goal}`);
+        if (sprint.startedAt) console.log(`Started: ${sprint.startedAt.slice(0, 10)}`);
+        if (sprint.closedAt) console.log(`Closed:  ${sprint.closedAt.slice(0, 10)}`);
+        if (sprint.prTitle) console.log(`PR: ${sprint.prTitle}`);
+        console.log(`\nIssues (${issues.length}):`);
+        if (issues.length === 0) {
+          console.log("  (none)");
+        } else {
+          const padId = String(Math.max(...issues.map((i) => i.id))).length + 1;
+          for (const i of issues) {
+            const status = i.status.padEnd(11);
+            const pts = i.storyPoints ? ` [${i.storyPoints}pt]` : "";
+            console.log(`  #${String(i.id).padStart(padId)} [${status}]${pts} ${i.title}`);
+            if (opts.verbose && i.description) console.log(`         ${i.description}`);
+          }
+        }
+        console.log();
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  sprint
     .command("velocity")
     .description("Show story point velocity for closed sprints")
     .option("--json", "Output as JSON")
     .action((opts: { json?: boolean }) => {
       try {
-        const velocity = getVelocity(projectId());
+        const velocity = getVelocity(requireProjectId());
         if (opts.json) {
           console.log(JSON.stringify(velocity, null, 2));
           return;

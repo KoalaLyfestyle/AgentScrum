@@ -1,14 +1,6 @@
 import type { Command } from "commander";
 import { getBacklog, getIssueDetail } from "../../services/scrum.js";
-
-function projectId(): number {
-  const raw = process.env["SCRUM_PROJECT_ID"];
-  if (!raw) {
-    console.error("Error: SCRUM_PROJECT_ID env var is required (use 'scrum <project> backlog')");
-    process.exit(1);
-  }
-  return parseInt(raw, 10);
-}
+import { requireProjectId } from "../projectContext.js";
 
 export function registerBacklog(program: Command): void {
   program
@@ -18,7 +10,7 @@ export function registerBacklog(program: Command): void {
     .option("--json", "Output as JSON")
     .action((opts: { verbose?: boolean; json?: boolean }) => {
       try {
-        const issues = getBacklog(projectId());
+        const issues = getBacklog(requireProjectId());
         if (opts.json) {
           const details = issues.map((i) => getIssueDetail(i.id));
           console.log(JSON.stringify(details, null, 2));

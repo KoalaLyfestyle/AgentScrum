@@ -6,22 +6,16 @@ import {
   updateIssueStatus,
   getIssueDetail,
   getActiveSprint,
+  getSprintByNumber,
+  listSprints,
   addAc,
 } from "../../services/scrum.js";
 import type { IssueDetail, IssueStatus, IssueType, Priority } from "../../schema/types.js";
+import { requireProjectId } from "../projectContext.js";
 
 const ISSUE_STATUSES: IssueStatus[] = ["todo", "in_progress", "review", "done", "blocked"];
 const ISSUE_TYPES: IssueType[] = ["feature", "bugfix", "refactor", "test", "docs"];
 const PRIORITIES: Priority[] = ["high", "medium", "low"];
-
-function projectId(): number {
-  const raw = process.env["SCRUM_PROJECT_ID"];
-  if (!raw) {
-    console.error("Error: SCRUM_PROJECT_ID env var is required");
-    process.exit(1);
-  }
-  return parseInt(raw, 10);
-}
 
 export function registerIssue(program: Command): void {
   const issue = program.command("issue").description("Manage issues");
@@ -46,7 +40,7 @@ export function registerIssue(program: Command): void {
           process.exit(1);
         }
         const storyPoints = opts.points ? parseInt(opts.points, 10) : undefined;
-        const sprint = getActiveSprint(projectId());
+        const sprint = getActiveSprint(requireProjectId());
         const created = createIssue(parseInt(epicId, 10), sprint.id, title, type, priority, opts.description, storyPoints);
         console.log(`Issue created: #${created.id} — ${created.title}`);
         console.log(`  Epic: ${created.epicId} | Sprint: ${created.sprintId} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
@@ -59,13 +53,17 @@ export function registerIssue(program: Command): void {
 
   issue
     .command("list")
-    .description("List all issues in the current sprint")
+    .description("List issues in the current sprint (or a specific sprint with --sprint)")
+    .option("--sprint <n>", "Sprint number to list issues from (default: current)")
     .option("--full", "Include acceptance criteria and description for each issue")
     .option("-V, --verbose", "Include description beneath each issue (alias for --full)")
     .option("--json", "Output as JSON (structured, machine-readable)")
-    .action((opts: { full?: boolean; verbose?: boolean; json?: boolean }) => {
+    .action((opts: { sprint?: string; full?: boolean; verbose?: boolean; json?: boolean }) => {
       try {
-        const sprint = getActiveSprint(projectId());
+        const pid = requireProjectId();
+        const sprint = opts.sprint
+          ? getSprintByNumber(pid, parseInt(opts.sprint, 10))
+          : getActiveSprint(pid);
         const issues = listIssues(sprint.id);
 
         if (opts.json) {

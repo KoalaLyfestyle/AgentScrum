@@ -1,17 +1,9 @@
 import type { Command } from "commander";
-import { createEpic, listEpics, updateEpicStatus } from "../../services/scrum.js";
+import { createEpic, listEpics, updateEpic, updateEpicStatus } from "../../services/scrum.js";
 import type { EpicStatus } from "../../schema/types.js";
+import { requireProjectId } from "../projectContext.js";
 
 const EPIC_STATUSES: EpicStatus[] = ["active", "complete", "paused"];
-
-function projectId(): number {
-  const raw = process.env["SCRUM_PROJECT_ID"];
-  if (!raw) {
-    console.error("Error: SCRUM_PROJECT_ID env var is required (use 'scrum <project> epic ...')");
-    process.exit(1);
-  }
-  return parseInt(raw, 10);
-}
 
 export function registerEpic(program: Command): void {
   const epic = program.command("epic").description("Manage epics");
@@ -23,7 +15,7 @@ export function registerEpic(program: Command): void {
     .option("--json", "Output as JSON")
     .action((opts: { verbose?: boolean; json?: boolean }) => {
       try {
-        const epics = listEpics(projectId());
+        const epics = listEpics(requireProjectId());
         if (opts.json) {
           console.log(JSON.stringify(epics, null, 2));
           return;
@@ -37,6 +29,34 @@ export function registerEpic(program: Command): void {
           const status = e.status.padEnd(8);
           console.log(`  #${e.id}  [${status}]  ${e.title}`);
         }
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  epic
+    .command("edit <epic-id>")
+    .description("Edit an epic's title or status")
+    .option("--title <text>", "New title")
+    .option("--status <status>", `New status (${EPIC_STATUSES.join("|")})`)
+    .action((epicId: string, opts: { title?: string; status?: string }) => {
+      try {
+        const patch: { title?: string; status?: EpicStatus } = {};
+        if (opts.title !== undefined) patch.title = opts.title;
+        if (opts.status !== undefined) {
+          if (!EPIC_STATUSES.includes(opts.status as EpicStatus)) {
+            console.error(`Invalid status: ${opts.status}. Must be one of: ${EPIC_STATUSES.join(", ")}`);
+            process.exit(1);
+          }
+          patch.status = opts.status as EpicStatus;
+        }
+        if (Object.keys(patch).length === 0) {
+          console.error("Error: specify at least one field (--title, --status)");
+          process.exit(1);
+        }
+        const updated = updateEpic(parseInt(epicId, 10), patch);
+        console.log(`Epic #${updated.id} updated: ${updated.title}  [${updated.status}]`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
