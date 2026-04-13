@@ -224,7 +224,8 @@ export function registerIssue(program: Command): void {
         if (detail.status === "blocked" && detail.blockerReason) console.log(`  Blocked: ${detail.blockerReason}`);
         if (detail.assignedTo) console.log(`  Assigned: ${detail.assignedTo}`);
         if (detail.claimedBy) {
-          console.log(`  Claimed by: ${detail.claimedBy} (at ${detail.claimedAt})`);
+          const atPart = detail.claimedAt ? ` (at ${detail.claimedAt})` : "";
+          console.log(`  Claimed by: ${detail.claimedBy}${atPart}`);
         }
         console.log(`  Tokens used: ${detail.tokensUsed}`);
 

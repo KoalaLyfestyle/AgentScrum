@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, or, lt } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type {
   Project,
@@ -450,7 +450,13 @@ function parseModelPrices(): Record<string, number> | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-    return parsed as Record<string, number>;
+    const map = parsed as Record<string, unknown>;
+    const validated: Record<string, number> = {};
+    for (const [model, price] of Object.entries(map)) {
+      if (typeof price !== "number" || !isFinite(price) || price < 0) return null;
+      validated[model] = price;
+    }
+    return Object.keys(validated).length > 0 ? validated : null;
   } catch {
     return null;
   }
@@ -459,7 +465,7 @@ function parseModelPrices(): Record<string, number> | null {
 export function getCostReport(projectId: number, sprintNumber?: number): CostReport {
   const db = getDb();
 
-  // Resolve target sprint — default to active, fall back to most recent planning sprint
+  // Resolve target sprint — default to the active sprint (throws if none active)
   let sprint: Sprint;
   if (sprintNumber !== undefined) {
     sprint = getSprintByNumber(projectId, sprintNumber);
@@ -482,9 +488,10 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
   }
 
   const modelPrices = parseModelPrices();
-  // Apply the first configured price uniformly (no per-issue model tracking yet)
-  const priceValues = modelPrices ? Object.values(modelPrices) : [];
-  const ratePerMillion = priceValues.length > 0 ? priceValues[0] : undefined;
+  // Apply cost uniformly — no per-issue model tracking yet.
+  // Use the alphabetically first model key for determinism when multiple are configured.
+  const firstModel = modelPrices ? Object.keys(modelPrices).sort()[0] : undefined;
+  const ratePerMillion = firstModel !== undefined ? modelPrices![firstModel] : undefined;
 
   const issues: CostReportIssue[] = allIssues.map((issue) => {
     const epicNum = epicNumberMap[issue.epicId] ?? issue.epicId;
@@ -664,54 +671,58 @@ function isClaimStale(claimedAt: string | null | undefined): boolean {
 
 export function assignIssue(issueId: number, agentId: string): Issue {
   const db = getDb();
-  return db.transaction((tx) => {
-    const current = tx
-      .select()
-      .from(schema.issues)
-      .where(eq(schema.issues.id, issueId))
-      .get() as Issue | undefined;
+  // Single conditional UPDATE — atomic under concurrent callers.
+  // Succeeds only when: unclaimed, self-claimed, or claim is stale (>30 min old).
+  const staleCutoff = new Date(Date.now() - CLAIM_TTL_MINUTES * 60_000).toISOString();
+  const updated = db
+    .update(schema.issues)
+    .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now() })
+    .where(
+      and(
+        eq(schema.issues.id, issueId),
+        or(
+          isNull(schema.issues.claimedBy),
+          eq(schema.issues.claimedBy, agentId),
+          lt(schema.issues.claimedAt, staleCutoff)
+        )
+      )
+    )
+    .returning()
+    .get();
+
+  if (!updated) {
+    // Row exists but claim check failed — surface who holds it
+    const current = db.select().from(schema.issues).where(eq(schema.issues.id, issueId)).get() as Issue | undefined;
     if (!current) throw new Error(`Issue ${issueId} not found`);
-
-    // Reject if already claimed by a different agent and claim is still fresh
-    if (current.claimedBy && current.claimedBy !== agentId && !isClaimStale(current.claimedAt)) {
-      throw new Error(
-        `Issue ${issueId} is already claimed by "${current.claimedBy}" (claimed ${current.claimedAt}). Use scrum_release_issue to release it first.`
-      );
-    }
-
-    const updated = tx
-      .update(schema.issues)
-      .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now() })
-      .where(eq(schema.issues.id, issueId))
-      .returning()
-      .get();
-    if (!updated) throw new Error(`Issue ${issueId} not found`);
-    return updated as Issue;
-  });
+    throw new Error(
+      `Issue ${issueId} is already claimed by "${current.claimedBy}" (claimed ${current.claimedAt}). Use scrum_release_issue to release it first.`
+    );
+  }
+  return updated as Issue;
 }
 
 export function releaseIssue(issueId: number, agentId?: string): Issue {
   const db = getDb();
-  const current = db
-    .select()
-    .from(schema.issues)
-    .where(eq(schema.issues.id, issueId))
-    .get() as Issue | undefined;
-  if (!current) throw new Error(`Issue ${issueId} not found`);
-
-  if (agentId && current.claimedBy && current.claimedBy !== agentId) {
-    throw new Error(
-      `Issue ${issueId} is claimed by "${current.claimedBy}", not "${agentId}". Only the claiming agent can release it.`
-    );
-  }
-
+  // Conditional WHERE — if agentId supplied, only release if that agent holds the claim.
   const updated = db
     .update(schema.issues)
     .set({ claimedBy: null, claimedAt: null })
-    .where(eq(schema.issues.id, issueId))
+    .where(
+      and(
+        eq(schema.issues.id, issueId),
+        agentId ? eq(schema.issues.claimedBy, agentId) : undefined
+      )
+    )
     .returning()
     .get();
-  if (!updated) throw new Error(`Issue ${issueId} not found`);
+
+  if (!updated) {
+    const current = db.select().from(schema.issues).where(eq(schema.issues.id, issueId)).get() as Issue | undefined;
+    if (!current) throw new Error(`Issue ${issueId} not found`);
+    throw new Error(
+      `Issue ${issueId} is claimed by "${current.claimedBy ?? "nobody"}", not "${agentId}". Only the claiming agent can release it.`
+    );
+  }
   return updated as Issue;
 }
 
@@ -838,9 +849,11 @@ export function getWorkPackage(projectId: number, capacity: number, agentId?: st
 
   for (const issue of allTodo) {
     if (issue.claimedBy && isClaimStale(issue.claimedAt)) {
+      // Conditional on the exact claimedAt we observed — avoids clearing a fresh claim
+      // that arrived between our SELECT and this UPDATE.
       db.update(schema.issues)
         .set({ claimedBy: null, claimedAt: null })
-        .where(eq(schema.issues.id, issue.id))
+        .where(and(eq(schema.issues.id, issue.id), eq(schema.issues.claimedAt, issue.claimedAt!)))
         .run();
       issue.claimedBy = null;
       issue.claimedAt = null;

@@ -343,3 +343,105 @@ describe("getVelocity", () => {
     expect(velocity[0]!.issuesCompleted).toBe(1);
   });
 });
+
+describe("getCostReport", () => {
+  it("returns tokens only when SCRUM_MODEL_PRICES is not set", () => {
+    delete process.env["SCRUM_MODEL_PRICES"];
+    const { project, sprint } = scrum.initProject("cost-no-price");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.logSession(issue.id, "did stuff", 1000);
+    const report = scrum.getCostReport(project.id);
+    expect(report.totalTokens).toBe(1000);
+    expect(report.totalCost).toBeUndefined();
+    expect(report.issues[0]!.estimatedCost).toBeUndefined();
+  });
+
+  it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", () => {
+    process.env["SCRUM_MODEL_PRICES"] = JSON.stringify({ "claude-sonnet-4-6": 3.0 });
+    const { project, sprint } = scrum.initProject("cost-with-price");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.logSession(issue.id, "did stuff", 1_000_000);
+    const report = scrum.getCostReport(project.id);
+    expect(report.totalTokens).toBe(1_000_000);
+    expect(report.totalCost).toBeCloseTo(3.0);
+    delete process.env["SCRUM_MODEL_PRICES"];
+  });
+});
+
+describe("claim locking", () => {
+  it("assignIssue sets claimedBy and claimedAt", () => {
+    const { project, sprint } = scrum.initProject("claim-basic");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const assigned = scrum.assignIssue(issue.id, "builder");
+    expect(assigned.claimedBy).toBe("builder");
+    expect(assigned.claimedAt).toBeTruthy();
+  });
+
+  it("assignIssue throws when issue is already claimed by a different agent", () => {
+    const { project, sprint } = scrum.initProject("claim-conflict");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    expect(() => scrum.assignIssue(issue.id, "auditor")).toThrow(/already claimed/);
+  });
+
+  it("assignIssue allows self-reclaim", () => {
+    const { project, sprint } = scrum.initProject("claim-self");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    const reclaimed = scrum.assignIssue(issue.id, "builder");
+    expect(reclaimed.claimedBy).toBe("builder");
+  });
+
+  it("releaseIssue clears the claim", () => {
+    const { project, sprint } = scrum.initProject("claim-release");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    const released = scrum.releaseIssue(issue.id, "builder");
+    expect(released.claimedBy).toBeNull();
+    expect(released.claimedAt).toBeNull();
+  });
+
+  it("releaseIssue throws when a different agent tries to release", () => {
+    const { project, sprint } = scrum.initProject("claim-release-conflict");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    expect(() => scrum.releaseIssue(issue.id, "auditor")).toThrow();
+  });
+
+  it("getWorkPackage excludes issues claimed by other agents", () => {
+    const { project, sprint } = scrum.initProject("claim-wp-filter");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const i1 = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.estimateIssue(i1.id, 3);
+    scrum.assignIssue(i1.id, "builder");
+    // auditor should not see builder's claimed issue
+    const pkg = scrum.getWorkPackage(project.id, 20, "auditor");
+    expect(pkg.issues.map((i) => i.id)).not.toContain(i1.id);
+  });
+
+  it("getWorkPackage includes self-claimed issues", () => {
+    const { project, sprint } = scrum.initProject("claim-wp-self");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const i1 = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.estimateIssue(i1.id, 3);
+    scrum.assignIssue(i1.id, "builder");
+    const pkg = scrum.getWorkPackage(project.id, 20, "builder");
+    expect(pkg.issues.map((i) => i.id)).toContain(i1.id);
+  });
+});
