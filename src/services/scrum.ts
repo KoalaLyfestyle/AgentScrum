@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type {
   Project,
@@ -18,6 +18,7 @@ import type {
   IssueDetail,
   SprintSummary,
   SprintVelocity,
+  Retrospective,
   WorkPackage,
   IssueStatus,
   IssueType,
@@ -307,7 +308,7 @@ export function getSprintSummary(sprintId: number): SprintSummary {
 
 export function createIssue(
   epicId: number,
-  sprintId: number,
+  sprintId: number | null,
   title: string,
   type: IssueType = "feature",
   priority: Priority = "medium",
@@ -322,7 +323,7 @@ export function createIssue(
     .insert(schema.issues)
     .values({
       epicId,
-      sprintId,
+      sprintId: sprintId ?? null,
       number: nextNumber,
       title,
       description: description ?? null,
@@ -372,21 +373,33 @@ export function updateIssue(
 }
 
 export function getBacklog(projectId: number): Issue[] {
-  // Backlog = issues in planning sprints (not yet started)
+  // Backlog = unassigned issues (no sprint) + issues in planning sprints
   const db = getDb();
-  const planningSprints = db
+
+  // Unassigned issues: sprint_id IS NULL within this project's epics
+  const unassignedRows = db
     .select()
-    .from(schema.sprints)
-    .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
+    .from(schema.issues)
+    .innerJoin(schema.epics, eq(schema.issues.epicId, schema.epics.id))
+    .where(
+      and(
+        eq(schema.epics.projectId, projectId),
+        isNull(schema.issues.sprintId)
+      )
+    )
     .all();
-  if (planningSprints.length === 0) return [];
-  const backlogRows = db
+  const unassigned = (unassignedRows as Array<{ issues: Issue }>).map((r) => r.issues);
+
+  // Planning-sprint issues
+  const planningRows = db
     .select()
     .from(schema.issues)
     .innerJoin(schema.sprints, eq(schema.issues.sprintId, schema.sprints.id))
     .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
     .all();
-  return backlogRows.map((row) => row.issues as Issue);
+  const planning = (planningRows as Array<{ issues: Issue }>).map((r) => r.issues);
+
+  return [...unassigned, ...planning];
 }
 
 export function getVelocity(projectId: number): SprintVelocity[] {
@@ -415,6 +428,73 @@ export function getVelocity(projectId: number): SprintVelocity[] {
   });
 }
 
+export function getRetrospective(projectId: number, sprintNumber?: number): Retrospective {
+  const db = getDb();
+
+  // Resolve target sprint
+  let sprint: Sprint;
+  if (sprintNumber !== undefined) {
+    const s = db
+      .select()
+      .from(schema.sprints)
+      .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.number, sprintNumber)))
+      .get();
+    if (!s) throw new Error(`Sprint ${sprintNumber} not found`);
+    sprint = s as Sprint;
+  } else {
+    const all = db
+      .select()
+      .from(schema.sprints)
+      .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "closed")))
+      .orderBy(schema.sprints.number)
+      .all() as Sprint[];
+    if (all.length === 0) throw new Error("No closed sprints found for this project");
+    sprint = all[all.length - 1]!;
+  }
+
+  const issues = db
+    .select()
+    .from(schema.issues)
+    .where(eq(schema.issues.sprintId, sprint.id))
+    .all() as Issue[];
+
+  // Blocked issues: any issue that has a blockerReason (was blocked during the sprint)
+  const blockedIssues = issues.filter((i) => i.blockerReason);
+
+  // Incomplete AC issues: done issues with at least one uncompleted AC
+  const incompleteAcIssues: Issue[] = [];
+  for (const issue of issues.filter((i) => i.status === "done")) {
+    const uncomplete = db
+      .select()
+      .from(schema.acceptanceCriteria)
+      .where(and(eq(schema.acceptanceCriteria.issueId, issue.id), eq(schema.acceptanceCriteria.completed, false)))
+      .all();
+    if (uncomplete.length > 0) incompleteAcIssues.push(issue);
+  }
+
+  // Expensive issues: tokensUsed > 2× sprint median (excluding zero-token issues)
+  const tokenValues = issues.map((i) => i.tokensUsed).filter((t) => t > 0);
+  let expensiveIssues: Issue[] = [];
+  if (tokenValues.length > 0) {
+    const sorted = [...tokenValues].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 === 0
+        ? ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2
+        : (sorted[mid] ?? 0);
+    const threshold = median * 2;
+    expensiveIssues = issues.filter((i) => i.tokensUsed > threshold);
+  }
+
+  return {
+    sprintNumber: sprint.number,
+    sprintTitle: sprint.title ?? undefined,
+    blockedIssues,
+    incompleteAcIssues,
+    expensiveIssues,
+  };
+}
+
 export function listIssues(sprintId: number): Issue[] {
   const db = getDb();
   return db
@@ -422,6 +502,32 @@ export function listIssues(sprintId: number): Issue[] {
     .from(schema.issues)
     .where(eq(schema.issues.sprintId, sprintId))
     .all() as Issue[];
+}
+
+/** All issues in a project, sorted by epic number then issue number. */
+export function getIssuesByProject(projectId: number): Issue[] {
+  const db = getDb();
+  const rows = db
+    .select()
+    .from(schema.issues)
+    .innerJoin(schema.epics, eq(schema.issues.epicId, schema.epics.id))
+    .where(eq(schema.epics.projectId, projectId))
+    .orderBy(schema.epics.number, schema.issues.number)
+    .all();
+  return rows.map((row) => row.issues as Issue);
+}
+
+/** All issues in a specific epic, sorted by sprint number then issue number. */
+export function getIssuesByEpic(epicId: number): Issue[] {
+  const db = getDb();
+  const rows = db
+    .select()
+    .from(schema.issues)
+    .leftJoin(schema.sprints, eq(schema.issues.sprintId, schema.sprints.id))
+    .where(eq(schema.issues.epicId, epicId))
+    .orderBy(schema.sprints.number, schema.issues.number)
+    .all();
+  return rows.map((row) => row.issues as Issue);
 }
 
 export function getSprintByNumber(projectId: number, sprintNumber: number): Sprint {
@@ -435,11 +541,22 @@ export function getSprintByNumber(projectId: number, sprintNumber: number): Spri
   return sprint as Sprint;
 }
 
-export function updateIssueStatus(issueId: number, status: IssueStatus): Issue {
+export function updateIssueStatus(issueId: number, status: IssueStatus, blockerReason?: string): Issue {
   const db = getDb();
+  // blockerReason is required when transitioning to blocked and preserved on all other transitions
+  // so retrospectives can see which issues were blocked even after they were unblocked.
+  if (status === "blocked") {
+    const reason = blockerReason?.trim();
+    if (!reason) throw new Error("blockerReason is required when status is blocked");
+    blockerReason = reason;
+  }
+  const patch: { status: IssueStatus; blockerReason?: string } = { status };
+  if (status === "blocked") {
+    patch.blockerReason = blockerReason;
+  }
   const issue = db
     .update(schema.issues)
-    .set({ status })
+    .set(patch)
     .where(eq(schema.issues.id, issueId))
     .returning()
     .get();

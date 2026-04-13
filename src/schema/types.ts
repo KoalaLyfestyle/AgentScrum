@@ -47,7 +47,7 @@ export interface SprintVelocity {
 export interface Issue {
   id: number;
   epicId: number;
-  sprintId: number;
+  sprintId: number | null; // null = unassigned (not yet added to any sprint)
   number: number; // sequential per epic; display as E01-I01, E01-I02, ...
   title: string;
   description?: string;
@@ -57,6 +57,7 @@ export interface Issue {
   assignedTo?: string; // agent identifier
   storyPoints?: number;
   tokensUsed: number;
+  blockerReason?: string | null;
   createdAt: string;
 }
 
@@ -119,6 +120,17 @@ export interface SprintSummary {
   total: number;
   byStatus: Record<IssueStatus, number>;
   activeIssue?: Issue;
+}
+
+export interface Retrospective {
+  sprintNumber: number;
+  sprintTitle?: string;
+  /** Issues that were or are currently blocked (have a blockerReason set). */
+  blockedIssues: Issue[];
+  /** Done issues that still have uncompleted acceptance criteria. */
+  incompleteAcIssues: Issue[];
+  /** Issues whose token usage exceeds 2× the sprint median. */
+  expensiveIssues: Issue[];
 }
 
 export interface WorkPackage {

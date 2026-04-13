@@ -81,6 +81,29 @@ Epics display as **E01 — CLI & Human UX**.
 
 The underlying numeric `id` is always available in `--json` output for programmatic use.
 
+## Scrum Conventions
+
+These conventions keep the backlog healthy and sprints predictable — for human PMs and agent PMs alike.
+
+**Epics** represent overarching features or product areas (e.g. "MCP Server", "CLI & Human UX"). They are long-lived and continuously developed across multiple sprints. Resist creating a new epic unless the work is genuinely a new product area — most issues belong in an existing one.
+
+**Issues** should be small enough to complete in one agent session. If an issue needs more than ~8 story points, split it. Tightly scoped issues produce cleaner session logs, easier retrospectives, and less wasted context when something goes wrong.
+
+**Story points** express complexity, not time. Use Fibonacci: 1 (trivial), 2 (small), 3 (medium), 5 (large), 8 (very large), 13 (split this). Estimate before starting work, not after.
+
+**Sprint load** is a suggestion, not a contract. A cold-start agent with a full context window might take 20pt; a focused fix session might take 5pt. Pass your actual capacity to `scrum_get_work_package` and trust the prioritization — don't over-commit just to fill the sprint.
+
+**Sprint lifecycle:**
+1. **Planning** — create the sprint, assign issues, set story point estimates
+2. **Active** — one sprint active at a time; agents pull work via `scrum_get_work_package`
+3. **Closed** — run `retro` to surface blockers, incomplete ACs, and expensive issues before planning the next sprint
+
+**Forward planning** — you can create Sprint N+1 and assign issues to it before closing Sprint N. This keeps the backlog groomed and lets human PMs prepare while agents are still working.
+
+**Blocker discipline** — when an issue is blocked, record the reason immediately via `scrum_update_issue_status` with `blocker_reason`. Retrospectives surface blocked issues with their reasons; an empty reason is useless for post-mortems.
+
+---
+
 ## Agent Usage Pattern
 
 **Session start** — one call gets everything:
@@ -95,7 +118,7 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (23)
+## MCP Tools (24)
 
 ### Read
 | Tool | Description |
@@ -104,6 +127,7 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | `scrum_get_issue_detail` | Full issue: ACs, sessions, assignment |
 | `scrum_get_my_issues` | Issues assigned to a specific agent |
 | `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. |
+| `scrum_get_retrospective` | Sprint retrospective: blocked issues (with reasons), done issues with incomplete ACs, high-token issues. Omit `sprint_number` for last closed sprint. |
 
 ### Project & Sprint
 | Tool | Description |
@@ -178,26 +202,37 @@ scrum <project> epic list                       # E01, E02... (epics have no sta
 scrum <project> epic add <title>               # create a new epic
 scrum <project> epic edit <epic-id> --title "New Name"
 
+# ── Epics (extended) ─────────────────────────────────────────────────────
+scrum <project> epic show <epic-id>             # all issues in an epic across all sprints
+
 # ── Issues ───────────────────────────────────────────────────────────────
-scrum <project> issue list                      # E01-I01 keys, current sprint
-scrum <project> issue list --sprint <N>         # historical sprint
+scrum <project> issue list                      # all project issues grouped by epic
+scrum <project> issue list --sprint <N>         # sprint-scoped view
+scrum <project> issue list --unassigned         # issues not yet assigned to any sprint
 scrum <project> issue list --verbose            # include description + ACs inline
 scrum <project> issue list --json               # full JSON (for agent consumption)
 scrum <project> issue add <epic-id> <title> \
   [--type feature|bugfix|refactor|test|docs] \
   [--priority high|medium|low] \
   [--description "what to build"] \
-  [--points 3]
+  [--points 3] \
+  [--sprint <N>]                                # omit to create unassigned
 scrum <project> issue edit <issue-id> \
   [--title "..."] [--description "..."] \
   [--priority high|medium|low] \
   [--type feature|bugfix|...] [--points 5]
 scrum <project> issue status <id> <status>      # todo|in_progress|review|done|blocked
-scrum <project> issue show <id>                 # ACs, sessions, token count
+scrum <project> issue status <id> blocked \
+  [--reason "why blocked"]                      # prompted interactively if omitted
+scrum <project> issue show <id>                 # ACs, sessions, token count, blocker reason
 scrum <project> issue ac <id> <text>            # add acceptance criterion
 
 # ── Backlog ───────────────────────────────────────────────────────────────
-scrum <project> backlog                         # issues in planning sprints
+scrum <project> backlog                         # unassigned issues + planning-sprint issues
+
+# ── Retrospective ─────────────────────────────────────────────────────────
+scrum <project> retro [<N>]                     # sprint retro (default: last closed sprint)
+scrum <project> retro [<N>] --json              # machine-readable JSON
 
 # ── Definition of Done ───────────────────────────────────────────────────
 scrum <project> dod list           # show DoD checklist

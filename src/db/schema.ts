@@ -43,7 +43,6 @@ export const issues = sqliteTable("issues", {
     .notNull()
     .references(() => epics.id),
   sprintId: integer("sprint_id", { mode: "number" })
-    .notNull()
     .references(() => sprints.id),
   number: integer("number", { mode: "number" }).notNull().default(0), // sequential per epic; set on insert
   title: text("title").notNull(),
@@ -64,6 +63,7 @@ export const issues = sqliteTable("issues", {
   assignedTo: text("assigned_to"),
   storyPoints: integer("story_points", { mode: "number" }),
   tokensUsed: real("tokens_used").notNull().default(0),
+  blockerReason: text("blocker_reason"),
   createdAt: text("created_at").notNull(),
 });
 

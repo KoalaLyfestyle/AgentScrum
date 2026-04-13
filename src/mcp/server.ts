@@ -93,6 +93,19 @@ server.registerTool(
     })
 );
 
+server.registerTool(
+  "scrum_get_retrospective",
+  {
+    description:
+      "Get a sprint retrospective summary: blocked issues (with reasons), done issues with incomplete ACs, and high-token issues. Omit sprint_number to query the last closed sprint.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+      sprint_number: z.number().int().optional().describe("Sprint number (default: last closed sprint)"),
+    },
+  },
+  (args) => safe(() => scrum.getRetrospective(args.project_id, args.sprint_number))
+);
+
 // ---------------------------------------------------------------------------
 // WRITE TOOLS — Project / Sprint lifecycle
 // ---------------------------------------------------------------------------
@@ -162,10 +175,10 @@ server.registerTool(
 server.registerTool(
   "scrum_create_issue",
   {
-    description: "Create a new issue in a sprint.",
+    description: "Create a new issue. Omit sprint_id to create an unassigned issue; supply sprint_id to assign it directly to a sprint.",
     inputSchema: {
       epic_id: z.number().int().describe("Epic ID the issue belongs to"),
-      sprint_id: z.number().int().describe("Sprint ID to add the issue to"),
+      sprint_id: z.number().int().optional().describe("Sprint ID to add the issue to"),
       title: z.string().describe("Issue title"),
       description: z.string().optional().describe("Requirements body — what to build and why. Include constraints and scope. This is what the builder reads before starting."),
       type: z
@@ -182,7 +195,7 @@ server.registerTool(
     },
   },
   (args) =>
-    safe(() => scrum.createIssue(args.epic_id, args.sprint_id, args.title, args.type, args.priority, args.description, args.story_points))
+    safe(() => scrum.createIssue(args.epic_id, args.sprint_id ?? null, args.title, args.type, args.priority, args.description, args.story_points))
 );
 
 server.registerTool(
@@ -194,9 +207,16 @@ server.registerTool(
       status: z
         .enum(["todo", "in_progress", "review", "done", "blocked"])
         .describe("New status"),
+      blocker_reason: z.string().optional().describe("Required when status=blocked: describe why the issue is blocked"),
     },
   },
-  (args) => safe(() => scrum.updateIssueStatus(args.issue_id, args.status))
+  (args) =>
+    safe(() => {
+      if (args.status === "blocked" && !args.blocker_reason?.trim()) {
+        throw new Error("blocker_reason is required when status=blocked");
+      }
+      return scrum.updateIssueStatus(args.issue_id, args.status, args.blocker_reason);
+    })
 );
 
 server.registerTool(
@@ -287,7 +307,7 @@ server.registerTool(
   "scrum_get_work_package",
   {
     description:
-      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. No follow-up reads needed. Also returns the project DoD checklist to complete after each issue.",
+      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. No follow-up reads needed. Also returns the project DoD checklist to complete after each issue. Conventions: epics are long-lived feature areas — reuse existing ones rather than creating new epics for each sprint. Issues should be completable in one session; split anything over 8pt. Adjust capacity honestly to match your context window — do not over-commit. When blocking an issue always supply a blocker_reason so retrospectives are useful.",
     inputSchema: {
       project_id: z.number().int().describe("Project ID"),
       capacity: z.number().int().min(1).describe("Story points available this session"),
