@@ -77,21 +77,6 @@ server.registerTool(
   (args) => safe(() => scrum.getIssueDetail(args.issue_id))
 );
 
-server.registerTool(
-  "scrum_get_my_issues",
-  {
-    description: "Get all issues assigned to a specific agent in the current sprint.",
-    inputSchema: {
-      project_id: z.number().int().describe("Project ID"),
-      agent_id: z.string().describe("Agent identifier (e.g. 'pm', 'builder', 'auditor')"),
-    },
-  },
-  (args) =>
-    safe(() => {
-      const sprint = scrum.getActiveSprint(args.project_id);
-      return scrum.getIssuesByAgent(sprint.id, args.agent_id);
-    })
-);
 
 server.registerTool(
   "scrum_get_retrospective",
@@ -329,18 +314,6 @@ server.registerTool(
 // PLANNING TOOLS — story points + work package
 // ---------------------------------------------------------------------------
 
-server.registerTool(
-  "scrum_estimate_issue",
-  {
-    description:
-      "Set the story point estimate for an issue. Call during sprint planning before the sprint starts. Use Fibonacci: 1 (trivial), 2 (small), 3 (medium), 5 (large), 8 (very large), 13 (epic — consider splitting).",
-    inputSchema: {
-      issue_id: z.number().int().describe("Issue ID"),
-      story_points: z.number().int().min(1).max(13).describe("Fibonacci estimate: 1, 2, 3, 5, 8, or 13"),
-    },
-  },
-  (args) => safe(() => scrum.estimateIssue(args.issue_id, args.story_points))
-);
 
 server.registerTool(
   "scrum_get_work_package",

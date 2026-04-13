@@ -56,7 +56,7 @@ claude mcp add agentscrum \
 
 > `tsx` is a dev dependency — it's available at `node_modules/.bin/tsx` after `npm install`. No separate global install needed. Use the **absolute path** to the binary since Claude Code may not inherit your shell's `PATH`.
 
-Once registered, all 27 MCP tools are available in every Claude Code session.
+Once registered, all 25 MCP tools are available in every Claude Code session.
 
 ## Project Selection
 
@@ -118,14 +118,13 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (27)
+## MCP Tools (25)
 
 ### Read
 | Tool | Description |
 |------|-------------|
 | `scrum_get_current_sprint` | Active sprint + all issues + status summary |
 | `scrum_get_issue_detail` | Full issue: ACs, sessions, assignment |
-| `scrum_get_my_issues` | Issues assigned to a specific agent |
 | `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. Auto-releases stale claims (>30 min). Pass `agent_id` to include self-claimed issues and exclude issues claimed by others. |
 | `scrum_get_retrospective` | Sprint retrospective: blocked issues (with reasons), done issues with incomplete ACs, high-token issues. Omit `sprint_number` for last closed sprint. |
 | `scrum_get_velocity` | Velocity data for all closed sprints: story points, issues completed, and total tokens used. Includes per-agent token breakdown when `assigned_to` is set on issues. |
@@ -150,7 +149,7 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | `scrum_update_issue_status` | Transition issue status |
 | `scrum_assign_issue` | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). |
 | `scrum_release_issue` | Release an issue claim so other agents can pick it up. |
-| `scrum_estimate_issue` | Set story point estimate (Fibonacci: 1,2,3,5,8,13) |
+| `scrum_update_issue` | Edit title, description, priority, type, or story point estimate after creation |
 
 ### Acceptance Criteria & Sessions
 | Tool | Description |
@@ -256,10 +255,7 @@ scrum <project> log <issue-id> <summary> [--tokens N] [--auditor pass|fail|skipp
 
 Story points express complexity before work starts. Use Fibonacci: **1** (trivial) · **2** (small) · **3** (medium) · **5** (large) · **8** (very large) · **13** (consider splitting).
 
-Set during sprint planning:
-```json
-scrum_estimate_issue { "issue_id": 5, "story_points": 3 }
-```
+Set during sprint planning via `scrum_update_issue { "issue_id": 5, "story_points": 3 }`.
 
 Token actuals (`tokens_used` per issue) are tracked for retrospective cost analysis. Story points are the planning unit; tokens are the forensic unit.
 
