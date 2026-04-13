@@ -49,11 +49,13 @@ export function registerIssue(program: Command): void {
         const pid = requireProjectId();
 
         let sprintId: number | null = null;
+        let sprintNumber: number | null = null;
         if (opts.sprint !== undefined) {
           const n = parseInt(opts.sprint, 10);
           if (Number.isNaN(n)) throw new Error(`Invalid sprint number: "${opts.sprint}"`);
           const sprint = getSprintByNumber(pid, n);
           sprintId = sprint.id;
+          sprintNumber = sprint.number;
         }
 
         const created = createIssue(parseInt(epicId, 10), sprintId, title, type, priority, opts.description, storyPoints);
@@ -61,7 +63,7 @@ export function registerIssue(program: Command): void {
         const epic = epics.find((e) => e.id === created.epicId);
         const key = epic ? issueKey(epic.number, created.number) : `#${created.id}`;
         const epicLabel = epic ? `${epicKey(epic.number)} ${epic.title}` : String(created.epicId);
-        const sprintLabel = created.sprintId != null ? `Sprint ${created.sprintId}` : "unassigned";
+        const sprintLabel = sprintNumber != null ? `Sprint ${sprintNumber}` : "unassigned";
         console.log(`Issue created: ${key} — ${created.title}`);
         console.log(`  Epic: ${epicLabel} | Sprint: ${sprintLabel} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
         if (created.description) console.log(`  Description: ${created.description}`);
