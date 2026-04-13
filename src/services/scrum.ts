@@ -424,6 +424,32 @@ export function listIssues(sprintId: number): Issue[] {
     .all() as Issue[];
 }
 
+/** All issues in a project, sorted by epic number then issue number. */
+export function getIssuesByProject(projectId: number): Issue[] {
+  const db = getDb();
+  const rows = db
+    .select()
+    .from(schema.issues)
+    .innerJoin(schema.epics, eq(schema.issues.epicId, schema.epics.id))
+    .where(eq(schema.epics.projectId, projectId))
+    .orderBy(schema.epics.number, schema.issues.number)
+    .all();
+  return rows.map((row) => row.issues as Issue);
+}
+
+/** All issues in a specific epic, sorted by sprint number then issue number. */
+export function getIssuesByEpic(epicId: number): Issue[] {
+  const db = getDb();
+  const rows = db
+    .select()
+    .from(schema.issues)
+    .leftJoin(schema.sprints, eq(schema.issues.sprintId, schema.sprints.id))
+    .where(eq(schema.issues.epicId, epicId))
+    .orderBy(schema.sprints.number, schema.issues.number)
+    .all();
+  return rows.map((row) => row.issues as Issue);
+}
+
 export function getSprintByNumber(projectId: number, sprintNumber: number): Sprint {
   const db = getDb();
   const sprint = db
