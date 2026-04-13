@@ -301,7 +301,7 @@ server.registerTool(
   "scrum_get_work_package",
   {
     description:
-      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. No follow-up reads needed. Also returns the project DoD checklist to complete after each issue.",
+      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. No follow-up reads needed. Also returns the project DoD checklist to complete after each issue. Conventions: epics are long-lived feature areas — reuse existing ones rather than creating new epics for each sprint. Issues should be completable in one session; split anything over 8pt. Adjust capacity honestly to match your context window — do not over-commit. When blocking an issue always supply a blocker_reason so retrospectives are useful.",
     inputSchema: {
       project_id: z.number().int().describe("Project ID"),
       capacity: z.number().int().min(1).describe("Story points available this session"),

@@ -81,6 +81,29 @@ Epics display as **E01 — CLI & Human UX**.
 
 The underlying numeric `id` is always available in `--json` output for programmatic use.
 
+## Scrum Conventions
+
+These conventions keep the backlog healthy and sprints predictable — for human PMs and agent PMs alike.
+
+**Epics** represent overarching features or product areas (e.g. "MCP Server", "CLI & Human UX"). They are long-lived and continuously developed across multiple sprints. Resist creating a new epic unless the work is genuinely a new product area — most issues belong in an existing one.
+
+**Issues** should be small enough to complete in one agent session. If an issue needs more than ~8 story points, split it. Tightly scoped issues produce cleaner session logs, easier retrospectives, and less wasted context when something goes wrong.
+
+**Story points** express complexity, not time. Use Fibonacci: 1 (trivial), 2 (small), 3 (medium), 5 (large), 8 (very large), 13 (split this). Estimate before starting work, not after.
+
+**Sprint load** is a suggestion, not a contract. A cold-start agent with a full context window might take 20pt; a focused fix session might take 5pt. Pass your actual capacity to `scrum_get_work_package` and trust the prioritization — don't over-commit just to fill the sprint.
+
+**Sprint lifecycle:**
+1. **Planning** — create the sprint, assign issues, set story point estimates
+2. **Active** — one sprint active at a time; agents pull work via `scrum_get_work_package`
+3. **Closed** — run `retro` to surface blockers, incomplete ACs, and expensive issues before planning the next sprint
+
+**Forward planning** — you can create Sprint N+1 and assign issues to it before closing Sprint N. This keeps the backlog groomed and lets human PMs prepare while agents are still working.
+
+**Blocker discipline** — when an issue is blocked, record the reason immediately via `scrum_update_issue_status` with `blocker_reason`. Retrospectives surface blocked issues with their reasons; an empty reason is useless for post-mortems.
+
+---
+
 ## Agent Usage Pattern
 
 **Session start** — one call gets everything:
