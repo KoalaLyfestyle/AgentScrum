@@ -223,6 +223,10 @@ export function registerIssue(program: Command): void {
         console.log(`  Status: ${detail.status} | Type: ${detail.type} | Priority: ${detail.priority}`);
         if (detail.status === "blocked" && detail.blockerReason) console.log(`  Blocked: ${detail.blockerReason}`);
         if (detail.assignedTo) console.log(`  Assigned: ${detail.assignedTo}`);
+        if (detail.claimedBy) {
+          const atPart = detail.claimedAt ? ` (at ${detail.claimedAt})` : "";
+          console.log(`  Claimed by: ${detail.claimedBy}${atPart}`);
+        }
         console.log(`  Tokens used: ${detail.tokensUsed}`);
 
         if (detail.acs.length > 0) {

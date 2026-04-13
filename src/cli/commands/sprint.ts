@@ -129,8 +129,9 @@ export function registerSprint(program: Command): void {
   sprint
     .command("velocity")
     .description("Show story point velocity for closed sprints")
+    .option("--tokens", "Include token usage column and per-agent breakdown")
     .option("--json", "Output as JSON")
-    .action((opts: { json?: boolean }) => {
+    .action((opts: { tokens?: boolean; json?: boolean }) => {
       try {
         const velocity = getVelocity(requireProjectId());
         if (opts.json) {
@@ -144,7 +145,13 @@ export function registerSprint(program: Command): void {
         console.log(`Velocity by sprint:\n`);
         for (const v of velocity) {
           const label = v.sprintTitle ? `Sprint ${v.sprintNumber} — ${v.sprintTitle}` : `Sprint ${v.sprintNumber}`;
-          console.log(`  ${label}:  ${v.pointsCompleted} pts  (${v.issuesCompleted} issues done)`);
+          const tokenPart = opts.tokens ? `  ${v.tokensUsed.toLocaleString()} tokens` : "";
+          console.log(`  ${label}:  ${v.pointsCompleted} pts  (${v.issuesCompleted} issues done)${tokenPart}`);
+          if (opts.tokens && v.tokensByAgent) {
+            for (const [agent, tokens] of Object.entries(v.tokensByAgent)) {
+              console.log(`    ${agent}: ${tokens.toLocaleString()} tokens`);
+            }
+          }
         }
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);

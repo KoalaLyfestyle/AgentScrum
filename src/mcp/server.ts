@@ -77,21 +77,6 @@ server.registerTool(
   (args) => safe(() => scrum.getIssueDetail(args.issue_id))
 );
 
-server.registerTool(
-  "scrum_get_my_issues",
-  {
-    description: "Get all issues assigned to a specific agent in the current sprint.",
-    inputSchema: {
-      project_id: z.number().int().describe("Project ID"),
-      agent_id: z.string().describe("Agent identifier (e.g. 'pm', 'builder', 'auditor')"),
-    },
-  },
-  (args) =>
-    safe(() => {
-      const sprint = scrum.getActiveSprint(args.project_id);
-      return scrum.getIssuesByAgent(sprint.id, args.agent_id);
-    })
-);
 
 server.registerTool(
   "scrum_get_retrospective",
@@ -104,6 +89,31 @@ server.registerTool(
     },
   },
   (args) => safe(() => scrum.getRetrospective(args.project_id, args.sprint_number))
+);
+
+server.registerTool(
+  "scrum_get_velocity",
+  {
+    description:
+      "Get velocity data for all closed sprints: story points completed, issues completed, and total tokens used per sprint. Includes per-agent token breakdown when issues have assigned_to set.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+    },
+  },
+  (args) => safe(() => scrum.getVelocity(args.project_id))
+);
+
+server.registerTool(
+  "scrum_get_cost_report",
+  {
+    description:
+      "Cost report for a sprint: tokens used and estimated USD cost per issue and sprint total. Requires SCRUM_MODEL_PRICES env var (JSON: model → $/1M tokens) for dollar figures; returns tokens-only when not set. Omit sprint_number for the active sprint.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+      sprint_number: z.number().int().optional().describe("Sprint number (default: active sprint)"),
+    },
+  },
+  (args) => safe(() => scrum.getCostReport(args.project_id, args.sprint_number))
 );
 
 // ---------------------------------------------------------------------------
@@ -222,13 +232,27 @@ server.registerTool(
 server.registerTool(
   "scrum_assign_issue",
   {
-    description: "Assign an issue to an agent. Use the agent's identifier (e.g. 'pm', 'builder', 'auditor').",
+    description:
+      "Assign an issue to an agent and atomically claim it to prevent concurrent pickup by other agents. Returns an error (not a crash) if the issue is already claimed by a different agent and the claim is still fresh (<30 min). Use the agent's identifier (e.g. 'pm', 'builder', 'auditor').",
     inputSchema: {
       issue_id: z.number().int().describe("Issue ID"),
       agent_id: z.string().describe("Agent identifier"),
     },
   },
   (args) => safe(() => scrum.assignIssue(args.issue_id, args.agent_id))
+);
+
+server.registerTool(
+  "scrum_release_issue",
+  {
+    description:
+      "Explicitly release an issue claim so other agents can pick it up. Call this when abandoning an issue or handing off work. Optionally pass agent_id to enforce that only the claiming agent can release.",
+    inputSchema: {
+      issue_id: z.number().int().describe("Issue ID"),
+      agent_id: z.string().optional().describe("Releasing agent's ID (optional — used to enforce ownership)"),
+    },
+  },
+  (args) => safe(() => scrum.releaseIssue(args.issue_id, args.agent_id))
 );
 
 // ---------------------------------------------------------------------------
@@ -290,18 +314,6 @@ server.registerTool(
 // PLANNING TOOLS — story points + work package
 // ---------------------------------------------------------------------------
 
-server.registerTool(
-  "scrum_estimate_issue",
-  {
-    description:
-      "Set the story point estimate for an issue. Call during sprint planning before the sprint starts. Use Fibonacci: 1 (trivial), 2 (small), 3 (medium), 5 (large), 8 (very large), 13 (epic — consider splitting).",
-    inputSchema: {
-      issue_id: z.number().int().describe("Issue ID"),
-      story_points: z.number().int().min(1).max(13).describe("Fibonacci estimate: 1, 2, 3, 5, 8, or 13"),
-    },
-  },
-  (args) => safe(() => scrum.estimateIssue(args.issue_id, args.story_points))
-);
 
 server.registerTool(
   "scrum_get_work_package",
@@ -311,9 +323,10 @@ server.registerTool(
     inputSchema: {
       project_id: z.number().int().describe("Project ID"),
       capacity: z.number().int().min(1).describe("Story points available this session"),
+      agent_id: z.string().optional().describe("Calling agent's ID — used to include self-claimed issues and exclude issues claimed by other agents"),
     },
   },
-  (args) => safe(() => scrum.getWorkPackage(args.project_id, args.capacity))
+  (args) => safe(() => scrum.getWorkPackage(args.project_id, args.capacity, args.agent_id))
 );
 
 // ---------------------------------------------------------------------------

@@ -42,6 +42,8 @@ export interface SprintVelocity {
   sprintTitle?: string;
   pointsCompleted: number;
   issuesCompleted: number;
+  tokensUsed: number;
+  tokensByAgent?: Record<string, number>;
 }
 
 export interface Issue {
@@ -58,6 +60,8 @@ export interface Issue {
   storyPoints?: number;
   tokensUsed: number;
   blockerReason?: string | null;
+  claimedBy?: string | null;
+  claimedAt?: string | null;
   createdAt: string;
 }
 
@@ -131,6 +135,24 @@ export interface Retrospective {
   incompleteAcIssues: Issue[];
   /** Issues whose token usage exceeds 2× the sprint median. */
   expensiveIssues: Issue[];
+}
+
+export interface CostReportIssue {
+  issueId: number;
+  issueKey: string; // e.g. "E03-I12"
+  title: string;
+  assignedTo?: string;
+  tokensUsed: number;
+  estimatedCost?: number; // USD; omitted when no price config
+}
+
+export interface CostReport {
+  sprintNumber: number;
+  sprintTitle?: string;
+  issues: CostReportIssue[];
+  totalTokens: number;
+  totalCost?: number; // USD; omitted when no price config
+  modelPrices?: Record<string, number>; // model → $/1M tokens used for calculation
 }
 
 export interface WorkPackage {
