@@ -175,7 +175,7 @@ server.registerTool(
 server.registerTool(
   "scrum_create_issue",
   {
-    description: "Create a new issue in a sprint.",
+    description: "Create a new issue. Omit sprint_id to create an unassigned issue; supply sprint_id to assign it directly to a sprint.",
     inputSchema: {
       epic_id: z.number().int().describe("Epic ID the issue belongs to"),
       sprint_id: z.number().int().optional().describe("Sprint ID to add the issue to"),
@@ -210,7 +210,13 @@ server.registerTool(
       blocker_reason: z.string().optional().describe("Required when status=blocked: describe why the issue is blocked"),
     },
   },
-  (args) => safe(() => scrum.updateIssueStatus(args.issue_id, args.status, args.blocker_reason))
+  (args) =>
+    safe(() => {
+      if (args.status === "blocked" && !args.blocker_reason?.trim()) {
+        throw new Error("blocker_reason is required when status=blocked");
+      }
+      return scrum.updateIssueStatus(args.issue_id, args.status, args.blocker_reason);
+    })
 );
 
 server.registerTool(

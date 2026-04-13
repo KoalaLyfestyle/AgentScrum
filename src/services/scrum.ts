@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type {
   Project,
@@ -376,7 +376,7 @@ export function getBacklog(projectId: number): Issue[] {
   // Backlog = unassigned issues (no sprint) + issues in planning sprints
   const db = getDb();
 
-  // Unassigned issues: sprint_id = NULL in a project's epics
+  // Unassigned issues: sprint_id IS NULL within this project's epics
   const unassignedRows = db
     .select()
     .from(schema.issues)
@@ -384,14 +384,11 @@ export function getBacklog(projectId: number): Issue[] {
     .where(
       and(
         eq(schema.epics.projectId, projectId),
-        // sprint_id IS NULL
-        // Drizzle doesn't have a direct isNull helper in v0.30 — use raw SQL via eq workaround
+        isNull(schema.issues.sprintId)
       )
     )
     .all();
-  const unassigned = (unassignedRows as Array<{ issues: Issue }>)
-    .map((r) => r.issues)
-    .filter((i) => i.sprintId == null);
+  const unassigned = (unassignedRows as Array<{ issues: Issue }>).map((r) => r.issues);
 
   // Planning-sprint issues
   const planningRows = db
@@ -546,10 +543,15 @@ export function getSprintByNumber(projectId: number, sprintNumber: number): Spri
 
 export function updateIssueStatus(issueId: number, status: IssueStatus, blockerReason?: string): Issue {
   const db = getDb();
-  // blockerReason is set when transitioning to blocked and preserved on all other transitions
+  // blockerReason is required when transitioning to blocked and preserved on all other transitions
   // so retrospectives can see which issues were blocked even after they were unblocked.
+  if (status === "blocked") {
+    const reason = blockerReason?.trim();
+    if (!reason) throw new Error("blockerReason is required when status is blocked");
+    blockerReason = reason;
+  }
   const patch: { status: IssueStatus; blockerReason?: string } = { status };
-  if (status === "blocked" && blockerReason !== undefined) {
+  if (status === "blocked") {
     patch.blockerReason = blockerReason;
   }
   const issue = db

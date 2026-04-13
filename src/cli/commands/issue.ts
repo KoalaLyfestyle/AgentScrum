@@ -7,7 +7,6 @@ import {
   updateIssue,
   updateIssueStatus,
   getIssueDetail,
-  getActiveSprint,
   getSprintByNumber,
   listSprints,
   getIssuesByProject,
