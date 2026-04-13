@@ -1,3 +1,4 @@
+import { readSync } from "fs";
 import type { Command } from "commander";
 import {
   createIssue,
@@ -175,14 +176,32 @@ export function registerIssue(program: Command): void {
   issue
     .command("status <issue-id> <status>")
     .description(`Update issue status (${ISSUE_STATUSES.join("|")})`)
-    .action((issueId: string, status: string) => {
+    .option("-r, --reason <text>", "Blocker reason (required when status=blocked)")
+    .action((issueId: string, status: string, opts: { reason?: string }) => {
       try {
         if (!ISSUE_STATUSES.includes(status as IssueStatus)) {
           console.error(`Invalid status: ${status}. Must be one of: ${ISSUE_STATUSES.join(", ")}`);
           process.exit(1);
         }
-        const updated = updateIssueStatus(parseInt(issueId, 10), status as IssueStatus);
+        let blockerReason: string | undefined;
+        if (status === "blocked") {
+          if (opts.reason) {
+            blockerReason = opts.reason;
+          } else {
+            // Interactive prompt — synchronous stdin read
+            process.stdout.write("Reason for block: ");
+            const buf = Buffer.alloc(1024);
+            const n = readSync(0, buf, 0, buf.length, null);
+            blockerReason = buf.slice(0, n).toString().trim();
+            if (!blockerReason) {
+              console.error("Error: blocker reason cannot be empty");
+              process.exit(1);
+            }
+          }
+        }
+        const updated = updateIssueStatus(parseInt(issueId, 10), status as IssueStatus, blockerReason);
         console.log(`Issue ${updated.id} status → ${updated.status}`);
+        if (updated.blockerReason) console.log(`  Blocked: ${updated.blockerReason}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
@@ -201,6 +220,7 @@ export function registerIssue(program: Command): void {
         const key = epic ? issueKey(epic.number, detail.number) : `#${detail.id}`;
         console.log(`\n${key}: ${detail.title}`);
         console.log(`  Status: ${detail.status} | Type: ${detail.type} | Priority: ${detail.priority}`);
+        if (detail.status === "blocked" && detail.blockerReason) console.log(`  Blocked: ${detail.blockerReason}`);
         if (detail.assignedTo) console.log(`  Assigned: ${detail.assignedTo}`);
         console.log(`  Tokens used: ${detail.tokensUsed}`);
 

@@ -1,0 +1,1 @@
+ALTER TABLE `issues` ADD `blocker_reason` text;

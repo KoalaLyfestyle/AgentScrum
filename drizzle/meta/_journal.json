@@ -50,6 +50,13 @@
       "when": 1776043942879,
       "tag": "0006_illegal_malcolm_colcord",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776048743771,
+      "tag": "0007_real_mockingbird",
+      "breakpoints": true
     }
   ]
 }

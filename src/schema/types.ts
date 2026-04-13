@@ -57,6 +57,7 @@ export interface Issue {
   assignedTo?: string; // agent identifier
   storyPoints?: number;
   tokensUsed: number;
+  blockerReason?: string | null;
   createdAt: string;
 }
 

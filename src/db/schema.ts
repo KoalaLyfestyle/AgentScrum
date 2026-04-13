@@ -63,6 +63,7 @@ export const issues = sqliteTable("issues", {
   assignedTo: text("assigned_to"),
   storyPoints: integer("story_points", { mode: "number" }),
   tokensUsed: real("tokens_used").notNull().default(0),
+  blockerReason: text("blocker_reason"),
   createdAt: text("created_at").notNull(),
 });
 

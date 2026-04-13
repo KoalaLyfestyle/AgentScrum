@@ -476,11 +476,18 @@ export function getSprintByNumber(projectId: number, sprintNumber: number): Spri
   return sprint as Sprint;
 }
 
-export function updateIssueStatus(issueId: number, status: IssueStatus): Issue {
+export function updateIssueStatus(issueId: number, status: IssueStatus, blockerReason?: string): Issue {
   const db = getDb();
+  const patch: { status: IssueStatus; blockerReason?: string | null } = { status };
+  if (status === "blocked") {
+    patch.blockerReason = blockerReason ?? null;
+  } else {
+    // Clear blocker reason when unblocking
+    patch.blockerReason = null;
+  }
   const issue = db
     .update(schema.issues)
-    .set({ status })
+    .set(patch)
     .where(eq(schema.issues.id, issueId))
     .returning()
     .get();

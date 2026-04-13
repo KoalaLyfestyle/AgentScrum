@@ -194,9 +194,10 @@ server.registerTool(
       status: z
         .enum(["todo", "in_progress", "review", "done", "blocked"])
         .describe("New status"),
+      blocker_reason: z.string().optional().describe("Required when status=blocked: describe why the issue is blocked"),
     },
   },
-  (args) => safe(() => scrum.updateIssueStatus(args.issue_id, args.status))
+  (args) => safe(() => scrum.updateIssueStatus(args.issue_id, args.status, args.blocker_reason))
 );
 
 server.registerTool(
