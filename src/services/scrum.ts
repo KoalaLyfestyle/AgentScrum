@@ -18,6 +18,8 @@ import type {
   IssueDetail,
   SprintSummary,
   SprintVelocity,
+  CostReport,
+  CostReportIssue,
   Retrospective,
   WorkPackage,
   IssueStatus,
@@ -411,21 +413,109 @@ export function getVelocity(projectId: number): SprintVelocity[] {
     .all() as Sprint[];
 
   return closedSprints.map((sprint) => {
-    const doneIssues = db
+    const allIssues = db
       .select()
       .from(schema.issues)
-      .where(and(eq(schema.issues.sprintId, sprint.id), eq(schema.issues.status, "done")))
+      .where(eq(schema.issues.sprintId, sprint.id))
       .all() as Issue[];
 
+    const doneIssues = allIssues.filter((i) => i.status === "done");
     const pointsCompleted = doneIssues.reduce((sum, i) => sum + (i.storyPoints ?? 0), 0);
+    const tokensUsed = allIssues.reduce((sum, i) => sum + i.tokensUsed, 0);
 
-    return {
+    const tokensByAgent: Record<string, number> = {};
+    for (const issue of allIssues) {
+      if (issue.assignedTo && issue.tokensUsed > 0) {
+        tokensByAgent[issue.assignedTo] = (tokensByAgent[issue.assignedTo] ?? 0) + issue.tokensUsed;
+      }
+    }
+
+    const result: SprintVelocity = {
       sprintNumber: sprint.number,
       sprintTitle: sprint.title ?? undefined,
       pointsCompleted,
       issuesCompleted: doneIssues.length,
+      tokensUsed,
     };
+    if (Object.keys(tokensByAgent).length > 0) {
+      result.tokensByAgent = tokensByAgent;
+    }
+    return result;
   });
+}
+
+function parseModelPrices(): Record<string, number> | null {
+  const raw = process.env["SCRUM_MODEL_PRICES"];
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, number>;
+  } catch {
+    return null;
+  }
+}
+
+export function getCostReport(projectId: number, sprintNumber?: number): CostReport {
+  const db = getDb();
+
+  // Resolve target sprint — default to active, fall back to most recent planning sprint
+  let sprint: Sprint;
+  if (sprintNumber !== undefined) {
+    sprint = getSprintByNumber(projectId, sprintNumber);
+  } else {
+    sprint = getActiveSprint(projectId);
+  }
+
+  const allIssues = db
+    .select()
+    .from(schema.issues)
+    .where(eq(schema.issues.sprintId, sprint.id))
+    .all() as Issue[];
+
+  // Build epic number lookup (epicId → epicNumber)
+  const epicIds = [...new Set(allIssues.map((i) => i.epicId))];
+  const epicNumberMap: Record<number, number> = {};
+  for (const epicId of epicIds) {
+    const epic = db.select().from(schema.epics).where(eq(schema.epics.id, epicId)).get() as { number: number } | undefined;
+    if (epic) epicNumberMap[epicId] = epic.number;
+  }
+
+  const modelPrices = parseModelPrices();
+  // Apply the first configured price uniformly (no per-issue model tracking yet)
+  const priceValues = modelPrices ? Object.values(modelPrices) : [];
+  const ratePerMillion = priceValues.length > 0 ? priceValues[0] : undefined;
+
+  const issues: CostReportIssue[] = allIssues.map((issue) => {
+    const epicNum = epicNumberMap[issue.epicId] ?? issue.epicId;
+    const key = issueKey(epicNum, issue.number);
+    const entry: CostReportIssue = {
+      issueId: issue.id,
+      issueKey: key,
+      title: issue.title,
+      tokensUsed: issue.tokensUsed,
+    };
+    if (issue.assignedTo) entry.assignedTo = issue.assignedTo;
+    if (ratePerMillion !== undefined) {
+      entry.estimatedCost = (issue.tokensUsed * ratePerMillion) / 1_000_000;
+    }
+    return entry;
+  });
+
+  const totalTokens = issues.reduce((sum, i) => sum + i.tokensUsed, 0);
+  const report: CostReport = {
+    sprintNumber: sprint.number,
+    sprintTitle: sprint.title ?? undefined,
+    issues,
+    totalTokens,
+  };
+  if (ratePerMillion !== undefined) {
+    report.totalCost = (totalTokens * ratePerMillion) / 1_000_000;
+  }
+  if (modelPrices) {
+    report.modelPrices = modelPrices;
+  }
+  return report;
 }
 
 export function getRetrospective(projectId: number, sprintNumber?: number): Retrospective {
@@ -564,16 +654,65 @@ export function updateIssueStatus(issueId: number, status: IssueStatus, blockerR
   return issue as Issue;
 }
 
+const CLAIM_TTL_MINUTES = 30;
+
+function isClaimStale(claimedAt: string | null | undefined): boolean {
+  if (!claimedAt) return false;
+  const ageMs = Date.now() - new Date(claimedAt).getTime();
+  return ageMs > CLAIM_TTL_MINUTES * 60_000;
+}
+
 export function assignIssue(issueId: number, agentId: string): Issue {
   const db = getDb();
-  const issue = db
+  return db.transaction((tx) => {
+    const current = tx
+      .select()
+      .from(schema.issues)
+      .where(eq(schema.issues.id, issueId))
+      .get() as Issue | undefined;
+    if (!current) throw new Error(`Issue ${issueId} not found`);
+
+    // Reject if already claimed by a different agent and claim is still fresh
+    if (current.claimedBy && current.claimedBy !== agentId && !isClaimStale(current.claimedAt)) {
+      throw new Error(
+        `Issue ${issueId} is already claimed by "${current.claimedBy}" (claimed ${current.claimedAt}). Use scrum_release_issue to release it first.`
+      );
+    }
+
+    const updated = tx
+      .update(schema.issues)
+      .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now() })
+      .where(eq(schema.issues.id, issueId))
+      .returning()
+      .get();
+    if (!updated) throw new Error(`Issue ${issueId} not found`);
+    return updated as Issue;
+  });
+}
+
+export function releaseIssue(issueId: number, agentId?: string): Issue {
+  const db = getDb();
+  const current = db
+    .select()
+    .from(schema.issues)
+    .where(eq(schema.issues.id, issueId))
+    .get() as Issue | undefined;
+  if (!current) throw new Error(`Issue ${issueId} not found`);
+
+  if (agentId && current.claimedBy && current.claimedBy !== agentId) {
+    throw new Error(
+      `Issue ${issueId} is claimed by "${current.claimedBy}", not "${agentId}". Only the claiming agent can release it.`
+    );
+  }
+
+  const updated = db
     .update(schema.issues)
-    .set({ assignedTo: agentId })
+    .set({ claimedBy: null, claimedAt: null })
     .where(eq(schema.issues.id, issueId))
     .returning()
     .get();
-  if (!issue) throw new Error(`Issue ${issueId} not found`);
-  return issue as Issue;
+  if (!updated) throw new Error(`Issue ${issueId} not found`);
+  return updated as Issue;
 }
 
 export function getIssuesByAgent(sprintId: number, agentId: string): Issue[] {
@@ -684,16 +823,36 @@ export function logSession(
 
 const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
-export function getWorkPackage(projectId: number, capacity: number): WorkPackage {
+export function getWorkPackage(projectId: number, capacity: number, agentId?: string): WorkPackage {
   const sprint = getActiveSprint(projectId);
   const dod = listDod(projectId);
 
   const db = getDb();
-  const todoIssues = db
+
+  // Auto-release stale claims before pulling work
+  const allTodo = db
     .select()
     .from(schema.issues)
     .where(and(eq(schema.issues.sprintId, sprint.id), eq(schema.issues.status, "todo")))
     .all() as Issue[];
+
+  for (const issue of allTodo) {
+    if (issue.claimedBy && isClaimStale(issue.claimedAt)) {
+      db.update(schema.issues)
+        .set({ claimedBy: null, claimedAt: null })
+        .where(eq(schema.issues.id, issue.id))
+        .run();
+      issue.claimedBy = null;
+      issue.claimedAt = null;
+    }
+  }
+
+  // Filter: only unclaimed or self-claimed issues
+  const todoIssues = allTodo.filter((i) => {
+    if (!i.claimedBy) return true;
+    if (agentId && i.claimedBy === agentId) return true;
+    return false;
+  });
 
   todoIssues.sort((a, b) => {
     const pa = PRIORITY_ORDER[a.priority as Priority] ?? 1;

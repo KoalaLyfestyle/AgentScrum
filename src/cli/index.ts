@@ -10,6 +10,7 @@ import { registerLog } from "./commands/log.js";
 import { registerDod } from "./commands/dod.js";
 import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
+import { registerCost } from "./commands/cost.js";
 import { findProject, findProjectByDirectory } from "../services/scrum.js";
 
 // ---------------------------------------------------------------------------
@@ -20,7 +21,7 @@ import { findProject, findProjectByDirectory } from "../services/scrum.js";
 // so Commander sees the subcommand directly.
 // ---------------------------------------------------------------------------
 const RESERVED = new Set([
-  "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "retro", "help",
+  "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "retro", "cost", "help",
   "--help", "-h", "--version", "-V",
 ]);
 
@@ -94,6 +95,7 @@ registerLog(program);
 registerDod(program);
 registerBacklog(program);
 registerRetro(program);
+registerCost(program);
 
 // Show help when called with no arguments
 if (process.argv.length === 2) {

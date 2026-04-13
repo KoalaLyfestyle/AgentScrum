@@ -56,7 +56,7 @@ claude mcp add agentscrum \
 
 > `tsx` is a dev dependency — it's available at `node_modules/.bin/tsx` after `npm install`. No separate global install needed. Use the **absolute path** to the binary since Claude Code may not inherit your shell's `PATH`.
 
-Once registered, all 23 MCP tools are available in every Claude Code session.
+Once registered, all 27 MCP tools are available in every Claude Code session.
 
 ## Project Selection
 
@@ -118,7 +118,7 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (24)
+## MCP Tools (27)
 
 ### Read
 | Tool | Description |
@@ -126,8 +126,10 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | `scrum_get_current_sprint` | Active sprint + all issues + status summary |
 | `scrum_get_issue_detail` | Full issue: ACs, sessions, assignment |
 | `scrum_get_my_issues` | Issues assigned to a specific agent |
-| `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. |
+| `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. Auto-releases stale claims (>30 min). Pass `agent_id` to include self-claimed issues and exclude issues claimed by others. |
 | `scrum_get_retrospective` | Sprint retrospective: blocked issues (with reasons), done issues with incomplete ACs, high-token issues. Omit `sprint_number` for last closed sprint. |
+| `scrum_get_velocity` | Velocity data for all closed sprints: story points, issues completed, and total tokens used. Includes per-agent token breakdown when `assigned_to` is set on issues. |
+| `scrum_get_cost_report` | Cost report for a sprint: tokens used and estimated USD cost per issue and sprint total. Requires `SCRUM_MODEL_PRICES` env var for dollar figures; tokens-only otherwise. |
 
 ### Project & Sprint
 | Tool | Description |
@@ -146,7 +148,8 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | `scrum_create_issue` | Create issue with optional description and story points |
 | `scrum_update_issue` | Edit title, description, priority, type, or story points after creation |
 | `scrum_update_issue_status` | Transition issue status |
-| `scrum_assign_issue` | Assign issue to an agent |
+| `scrum_assign_issue` | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). |
+| `scrum_release_issue` | Release an issue claim so other agents can pick it up. |
 | `scrum_estimate_issue` | Set story point estimate (Fibonacci: 1,2,3,5,8,13) |
 
 ### Acceptance Criteria & Sessions
@@ -192,6 +195,7 @@ scrum <project> sprint update <N> \
   [--pr-title "Sprint N: ..."] \
   [--pr-desc "..."]
 scrum <project> sprint velocity                 # story points completed per sprint
+scrum <project> sprint velocity --tokens        # add token usage column + per-agent breakdown
 
 # ── Status (current sprint summary) ─────────────────────────────────────
 scrum <project> status             # sprint summary + active issue + DoD
@@ -233,6 +237,11 @@ scrum <project> backlog                         # unassigned issues + planning-s
 # ── Retrospective ─────────────────────────────────────────────────────────
 scrum <project> retro [<N>]                     # sprint retro (default: last closed sprint)
 scrum <project> retro [<N>] --json              # machine-readable JSON
+
+# ── Cost Report ────────────────────────────────────────────────────────────
+scrum <project> cost                            # tokens per issue for active sprint
+scrum <project> cost <N>                        # tokens per issue for sprint N
+scrum <project> cost --json                     # machine-readable JSON
 
 # ── Definition of Done ───────────────────────────────────────────────────
 scrum <project> dod list           # show DoD checklist
@@ -286,6 +295,7 @@ npx tsx scripts/export-sprint.ts --sprint <N> [--project <id>]
 SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: ./agentscrum.db)
 OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
 SCRUM_PROJECT_ID=1                               # MCP server / script fallback
+SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost reporting
 ```
 
 | Variable | Default | Description |
@@ -293,13 +303,14 @@ SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 | `SCRUM_DB_PATH` | `./agentscrum.db` | SQLite path — use absolute path so CLI works from any directory |
 | `SCRUM_PROJECT_ID` | — | Used by MCP server and scripts; CLI takes project name as first argument |
 | `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts` |
+| `SCRUM_MODEL_PRICES` | — | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
 
 ## Roadmap
 
 ### Near-term
 - Blocked issue reason field — structured blocker description on `blocked` status transition
 - `scrum_get_retrospective` — queries blocked issues, failed ACs, high-token issues for sprint summary
-- Token velocity per sprint/agent/model — "what did this sprint cost?"
+- Token velocity per sprint/agent/model + cost reporting (`scrum_get_velocity`, `scrum_get_cost_report`, `scrum cost`)
 
 ### Medium-term
 - Multi-agent conflict detection — prevent two agents claiming the same issue simultaneously
