@@ -95,7 +95,7 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (23)
+## MCP Tools (24)
 
 ### Read
 | Tool | Description |
@@ -104,6 +104,7 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | `scrum_get_issue_detail` | Full issue: ACs, sessions, assignment |
 | `scrum_get_my_issues` | Issues assigned to a specific agent |
 | `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. |
+| `scrum_get_retrospective` | Sprint retrospective: blocked issues (with reasons), done issues with incomplete ACs, high-token issues. Omit `sprint_number` for last closed sprint. |
 
 ### Project & Sprint
 | Tool | Description |
@@ -178,26 +179,37 @@ scrum <project> epic list                       # E01, E02... (epics have no sta
 scrum <project> epic add <title>               # create a new epic
 scrum <project> epic edit <epic-id> --title "New Name"
 
+# ── Epics (extended) ─────────────────────────────────────────────────────
+scrum <project> epic show <epic-id>             # all issues in an epic across all sprints
+
 # ── Issues ───────────────────────────────────────────────────────────────
-scrum <project> issue list                      # E01-I01 keys, current sprint
-scrum <project> issue list --sprint <N>         # historical sprint
+scrum <project> issue list                      # all project issues grouped by epic
+scrum <project> issue list --sprint <N>         # sprint-scoped view
+scrum <project> issue list --unassigned         # issues not yet assigned to any sprint
 scrum <project> issue list --verbose            # include description + ACs inline
 scrum <project> issue list --json               # full JSON (for agent consumption)
 scrum <project> issue add <epic-id> <title> \
   [--type feature|bugfix|refactor|test|docs] \
   [--priority high|medium|low] \
   [--description "what to build"] \
-  [--points 3]
+  [--points 3] \
+  [--sprint <N>]                                # omit to create unassigned
 scrum <project> issue edit <issue-id> \
   [--title "..."] [--description "..."] \
   [--priority high|medium|low] \
   [--type feature|bugfix|...] [--points 5]
 scrum <project> issue status <id> <status>      # todo|in_progress|review|done|blocked
-scrum <project> issue show <id>                 # ACs, sessions, token count
+scrum <project> issue status <id> blocked \
+  [--reason "why blocked"]                      # prompted interactively if omitted
+scrum <project> issue show <id>                 # ACs, sessions, token count, blocker reason
 scrum <project> issue ac <id> <text>            # add acceptance criterion
 
 # ── Backlog ───────────────────────────────────────────────────────────────
-scrum <project> backlog                         # issues in planning sprints
+scrum <project> backlog                         # unassigned issues + planning-sprint issues
+
+# ── Retrospective ─────────────────────────────────────────────────────────
+scrum <project> retro [<N>]                     # sprint retro (default: last closed sprint)
+scrum <project> retro [<N>] --json              # machine-readable JSON
 
 # ── Definition of Done ───────────────────────────────────────────────────
 scrum <project> dod list           # show DoD checklist

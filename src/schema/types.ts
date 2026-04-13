@@ -122,6 +122,17 @@ export interface SprintSummary {
   activeIssue?: Issue;
 }
 
+export interface Retrospective {
+  sprintNumber: number;
+  sprintTitle?: string;
+  /** Issues that were or are currently blocked (have a blockerReason set). */
+  blockedIssues: Issue[];
+  /** Done issues that still have uncompleted acceptance criteria. */
+  incompleteAcIssues: Issue[];
+  /** Issues whose token usage exceeds 2× the sprint median. */
+  expensiveIssues: Issue[];
+}
+
 export interface WorkPackage {
   sprint: Sprint;
   dod: string[];

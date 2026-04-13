@@ -93,6 +93,19 @@ server.registerTool(
     })
 );
 
+server.registerTool(
+  "scrum_get_retrospective",
+  {
+    description:
+      "Get a sprint retrospective summary: blocked issues (with reasons), done issues with incomplete ACs, and high-token issues. Omit sprint_number to query the last closed sprint.",
+    inputSchema: {
+      project_id: z.number().int().describe("Project ID"),
+      sprint_number: z.number().int().optional().describe("Sprint number (default: last closed sprint)"),
+    },
+  },
+  (args) => safe(() => scrum.getRetrospective(args.project_id, args.sprint_number))
+);
+
 // ---------------------------------------------------------------------------
 // WRITE TOOLS — Project / Sprint lifecycle
 // ---------------------------------------------------------------------------

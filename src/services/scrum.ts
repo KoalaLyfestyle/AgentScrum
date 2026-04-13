@@ -18,6 +18,7 @@ import type {
   IssueDetail,
   SprintSummary,
   SprintVelocity,
+  Retrospective,
   WorkPackage,
   IssueStatus,
   IssueType,
@@ -430,6 +431,73 @@ export function getVelocity(projectId: number): SprintVelocity[] {
   });
 }
 
+export function getRetrospective(projectId: number, sprintNumber?: number): Retrospective {
+  const db = getDb();
+
+  // Resolve target sprint
+  let sprint: Sprint;
+  if (sprintNumber !== undefined) {
+    const s = db
+      .select()
+      .from(schema.sprints)
+      .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.number, sprintNumber)))
+      .get();
+    if (!s) throw new Error(`Sprint ${sprintNumber} not found`);
+    sprint = s as Sprint;
+  } else {
+    const all = db
+      .select()
+      .from(schema.sprints)
+      .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "closed")))
+      .orderBy(schema.sprints.number)
+      .all() as Sprint[];
+    if (all.length === 0) throw new Error("No closed sprints found for this project");
+    sprint = all[all.length - 1]!;
+  }
+
+  const issues = db
+    .select()
+    .from(schema.issues)
+    .where(eq(schema.issues.sprintId, sprint.id))
+    .all() as Issue[];
+
+  // Blocked issues: any issue that has a blockerReason (was blocked during the sprint)
+  const blockedIssues = issues.filter((i) => i.blockerReason);
+
+  // Incomplete AC issues: done issues with at least one uncompleted AC
+  const incompleteAcIssues: Issue[] = [];
+  for (const issue of issues.filter((i) => i.status === "done")) {
+    const uncomplete = db
+      .select()
+      .from(schema.acceptanceCriteria)
+      .where(and(eq(schema.acceptanceCriteria.issueId, issue.id), eq(schema.acceptanceCriteria.completed, false)))
+      .all();
+    if (uncomplete.length > 0) incompleteAcIssues.push(issue);
+  }
+
+  // Expensive issues: tokensUsed > 2× sprint median (excluding zero-token issues)
+  const tokenValues = issues.map((i) => i.tokensUsed).filter((t) => t > 0);
+  let expensiveIssues: Issue[] = [];
+  if (tokenValues.length > 0) {
+    const sorted = [...tokenValues].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 === 0
+        ? ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2
+        : (sorted[mid] ?? 0);
+    const threshold = median * 2;
+    expensiveIssues = issues.filter((i) => i.tokensUsed > threshold);
+  }
+
+  return {
+    sprintNumber: sprint.number,
+    sprintTitle: sprint.title ?? undefined,
+    blockedIssues,
+    incompleteAcIssues,
+    expensiveIssues,
+  };
+}
+
 export function listIssues(sprintId: number): Issue[] {
   const db = getDb();
   return db
@@ -478,12 +546,11 @@ export function getSprintByNumber(projectId: number, sprintNumber: number): Spri
 
 export function updateIssueStatus(issueId: number, status: IssueStatus, blockerReason?: string): Issue {
   const db = getDb();
-  const patch: { status: IssueStatus; blockerReason?: string | null } = { status };
-  if (status === "blocked") {
-    patch.blockerReason = blockerReason ?? null;
-  } else {
-    // Clear blocker reason when unblocking
-    patch.blockerReason = null;
+  // blockerReason is set when transitioning to blocked and preserved on all other transitions
+  // so retrospectives can see which issues were blocked even after they were unblocked.
+  const patch: { status: IssueStatus; blockerReason?: string } = { status };
+  if (status === "blocked" && blockerReason !== undefined) {
+    patch.blockerReason = blockerReason;
   }
   const issue = db
     .update(schema.issues)
