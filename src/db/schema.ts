@@ -43,7 +43,6 @@ export const issues = sqliteTable("issues", {
     .notNull()
     .references(() => epics.id),
   sprintId: integer("sprint_id", { mode: "number" })
-    .notNull()
     .references(() => sprints.id),
   number: integer("number", { mode: "number" }).notNull().default(0), // sequential per epic; set on insert
   title: text("title").notNull(),

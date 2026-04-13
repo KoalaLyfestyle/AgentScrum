@@ -5,7 +5,7 @@ import { requireProjectId } from "../projectContext.js";
 export function registerBacklog(program: Command): void {
   program
     .command("backlog")
-    .description("List backlog issues (issues in planning sprints, not yet started)")
+    .description("List backlog: unassigned issues and issues in planning sprints")
     .option("-V, --verbose", "Include description and acceptance criteria for each issue")
     .option("--json", "Output as JSON")
     .action((opts: { verbose?: boolean; json?: boolean }) => {
@@ -17,7 +17,7 @@ export function registerBacklog(program: Command): void {
           return;
         }
         if (issues.length === 0) {
-          console.log("Backlog is empty — no issues in planning sprints.");
+          console.log("Backlog is empty — no unassigned issues and no issues in planning sprints.");
           return;
         }
         console.log(`Backlog (${issues.length} issue${issues.length === 1 ? "" : "s"}):\n`);

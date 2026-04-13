@@ -26,12 +26,13 @@ export function registerIssue(program: Command): void {
 
   issue
     .command("add <epic-id> <title>")
-    .description("Create a new issue in the current sprint")
+    .description("Create a new issue. Omit --sprint to create unassigned; use --sprint <N> to assign to a sprint.")
     .option("-t, --type <type>", `Issue type (${ISSUE_TYPES.join("|")})`, "feature")
     .option("-p, --priority <priority>", `Priority (${PRIORITIES.join("|")})`, "medium")
     .option("-d, --description <text>", "Requirements body — what to build and why")
     .option("--points <n>", "Story point estimate (Fibonacci: 1, 2, 3, 5, 8, 13)")
-    .action((epicId: string, title: string, opts: { type: string; priority: string; description?: string; points?: string }) => {
+    .option("--sprint <n>", "Sprint number to assign the issue to")
+    .action((epicId: string, title: string, opts: { type: string; priority: string; description?: string; points?: string; sprint?: string }) => {
       try {
         const type = opts.type as IssueType;
         const priority = opts.priority as Priority;
@@ -45,14 +46,23 @@ export function registerIssue(program: Command): void {
         }
         const storyPoints = opts.points ? parseInt(opts.points, 10) : undefined;
         const pid = requireProjectId();
-        const sprint = getActiveSprint(pid);
-        const created = createIssue(parseInt(epicId, 10), sprint.id, title, type, priority, opts.description, storyPoints);
+
+        let sprintId: number | null = null;
+        if (opts.sprint !== undefined) {
+          const n = parseInt(opts.sprint, 10);
+          if (Number.isNaN(n)) throw new Error(`Invalid sprint number: "${opts.sprint}"`);
+          const sprint = getSprintByNumber(pid, n);
+          sprintId = sprint.id;
+        }
+
+        const created = createIssue(parseInt(epicId, 10), sprintId, title, type, priority, opts.description, storyPoints);
         const epics = listEpics(pid);
         const epic = epics.find((e) => e.id === created.epicId);
         const key = epic ? issueKey(epic.number, created.number) : `#${created.id}`;
         const epicLabel = epic ? `${epicKey(epic.number)} ${epic.title}` : String(created.epicId);
+        const sprintLabel = created.sprintId != null ? `Sprint ${created.sprintId}` : "unassigned";
         console.log(`Issue created: ${key} — ${created.title}`);
-        console.log(`  Epic: ${epicLabel} | Sprint: ${created.sprintId} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
+        console.log(`  Epic: ${epicLabel} | Sprint: ${sprintLabel} | Type: ${created.type} | Priority: ${created.priority}${created.storyPoints ? ` | Points: ${created.storyPoints}` : ""}`);
         if (created.description) console.log(`  Description: ${created.description}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -110,9 +120,8 @@ export function registerIssue(program: Command): void {
         const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
         const sprintMap = new Map(listSprints(pid).map((s) => [s.id, s]));
 
-        // --unassigned: issues with no sprint (sprint_id will be nullable after E04-I16)
         const filtered = opts.unassigned
-          ? allIssues.filter((i) => (i.sprintId as number | null) == null)
+          ? allIssues.filter((i) => i.sprintId == null)
           : allIssues;
 
         if (opts.json) {
@@ -141,7 +150,7 @@ export function registerIssue(program: Command): void {
           console.log(`  ${header}`);
           for (const i of epicIssues) {
             const key = epic ? issueKey(epic.number, i.number) : `#${i.id}`;
-            const sprint = (i.sprintId as number | null) != null ? sprintMap.get(i.sprintId!) : undefined;
+            const sprint = i.sprintId != null ? sprintMap.get(i.sprintId) : undefined;
             const sprintCtx = sprint ? `Sprint ${sprint.number}` : "unassigned";
             const statusCtx = `${i.status} — ${sprintCtx}`.padEnd(25);
             const priority = i.priority.padEnd(7);

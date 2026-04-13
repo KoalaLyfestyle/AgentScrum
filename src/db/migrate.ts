@@ -10,7 +10,10 @@ const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
 const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
+// FK enforcement is disabled during migration so table recreation migrations
+// (required by SQLite's lack of ALTER COLUMN) can run without constraint errors.
+// The application re-enables FK enforcement at runtime via db/index.ts.
+sqlite.pragma("foreign_keys = OFF");
 
 const db = drizzle(sqlite);
 

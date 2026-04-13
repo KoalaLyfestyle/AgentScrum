@@ -90,7 +90,7 @@ export function registerEpic(program: Command): void {
         console.log();
         for (const i of issues) {
           const key = issueKey(epic.number, i.number);
-          const sprint = (i.sprintId as number | null) != null ? sprintMap.get(i.sprintId!) : undefined;
+          const sprint = i.sprintId != null ? sprintMap.get(i.sprintId) : undefined;
           const sprintCtx = sprint ? `Sprint ${sprint.number}` : "unassigned";
           const statusCtx = `${i.status} — ${sprintCtx}`.padEnd(25);
           const priority = i.priority.padEnd(7);

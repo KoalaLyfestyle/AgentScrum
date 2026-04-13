@@ -165,7 +165,7 @@ server.registerTool(
     description: "Create a new issue in a sprint.",
     inputSchema: {
       epic_id: z.number().int().describe("Epic ID the issue belongs to"),
-      sprint_id: z.number().int().describe("Sprint ID to add the issue to"),
+      sprint_id: z.number().int().optional().describe("Sprint ID to add the issue to"),
       title: z.string().describe("Issue title"),
       description: z.string().optional().describe("Requirements body — what to build and why. Include constraints and scope. This is what the builder reads before starting."),
       type: z
@@ -182,7 +182,7 @@ server.registerTool(
     },
   },
   (args) =>
-    safe(() => scrum.createIssue(args.epic_id, args.sprint_id, args.title, args.type, args.priority, args.description, args.story_points))
+    safe(() => scrum.createIssue(args.epic_id, args.sprint_id ?? null, args.title, args.type, args.priority, args.description, args.story_points))
 );
 
 server.registerTool(

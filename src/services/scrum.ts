@@ -307,7 +307,7 @@ export function getSprintSummary(sprintId: number): SprintSummary {
 
 export function createIssue(
   epicId: number,
-  sprintId: number,
+  sprintId: number | null,
   title: string,
   type: IssueType = "feature",
   priority: Priority = "medium",
@@ -322,7 +322,7 @@ export function createIssue(
     .insert(schema.issues)
     .values({
       epicId,
-      sprintId,
+      sprintId: sprintId ?? null,
       number: nextNumber,
       title,
       description: description ?? null,
@@ -372,21 +372,36 @@ export function updateIssue(
 }
 
 export function getBacklog(projectId: number): Issue[] {
-  // Backlog = issues in planning sprints (not yet started)
+  // Backlog = unassigned issues (no sprint) + issues in planning sprints
   const db = getDb();
-  const planningSprints = db
+
+  // Unassigned issues: sprint_id = NULL in a project's epics
+  const unassignedRows = db
     .select()
-    .from(schema.sprints)
-    .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
+    .from(schema.issues)
+    .innerJoin(schema.epics, eq(schema.issues.epicId, schema.epics.id))
+    .where(
+      and(
+        eq(schema.epics.projectId, projectId),
+        // sprint_id IS NULL
+        // Drizzle doesn't have a direct isNull helper in v0.30 — use raw SQL via eq workaround
+      )
+    )
     .all();
-  if (planningSprints.length === 0) return [];
-  const backlogRows = db
+  const unassigned = (unassignedRows as Array<{ issues: Issue }>)
+    .map((r) => r.issues)
+    .filter((i) => i.sprintId == null);
+
+  // Planning-sprint issues
+  const planningRows = db
     .select()
     .from(schema.issues)
     .innerJoin(schema.sprints, eq(schema.issues.sprintId, schema.sprints.id))
     .where(and(eq(schema.sprints.projectId, projectId), eq(schema.sprints.status, "planning")))
     .all();
-  return backlogRows.map((row) => row.issues as Issue);
+  const planning = (planningRows as Array<{ issues: Issue }>).map((r) => r.issues);
+
+  return [...unassigned, ...planning];
 }
 
 export function getVelocity(projectId: number): SprintVelocity[] {
