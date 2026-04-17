@@ -190,7 +190,10 @@ describe("getWorkPackage", () => {
 
     // capacity 4 — fits i1 (3pts), skips i2 (5pts)
     const pkg = scrum.getWorkPackage(project.id, 4);
-    expect(pkg.dod).toEqual(["Run npm test", "Commit"]);
+    expect(pkg.dod).toEqual([
+      expect.objectContaining({ text: "Run npm test", completed: false }),
+      expect.objectContaining({ text: "Commit", completed: false }),
+    ]);
     expect(pkg.capacityRequested).toBe(4);
     expect(pkg.capacityUsed).toBe(3);
     expect(pkg.issues).toHaveLength(1);

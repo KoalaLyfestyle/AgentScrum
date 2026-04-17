@@ -228,6 +228,8 @@ export function registerIssue(program: Command): void {
           console.log(`  Claimed by: ${detail.claimedBy}${atPart}`);
         }
         console.log(`  Tokens used: ${detail.tokensUsed}`);
+        if (detail.startedAt) console.log(`  Started: ${detail.startedAt.slice(0, 10)}`);
+        if (detail.completedAt) console.log(`  Completed: ${detail.completedAt.slice(0, 10)}`);
 
         if (detail.acs.length > 0) {
           console.log(`\nAcceptance Criteria:`);
@@ -241,8 +243,9 @@ export function registerIssue(program: Command): void {
           console.log(`\nSession History:`);
           for (const s of detail.sessions) {
             const verdict = s.auditor ? ` [${s.auditor.toUpperCase()}]` : "";
-            console.log(`  ${s.date}${verdict}: ${s.summary}`);
+            console.log(`  ${s.createdAt.slice(0, 10)}${verdict}: ${s.summary}`);
             if (s.tokensUsed > 0) console.log(`    tokens: ${s.tokensUsed}`);
+            if (s.model) console.log(`    model: ${s.model}`);
           }
         }
         console.log();

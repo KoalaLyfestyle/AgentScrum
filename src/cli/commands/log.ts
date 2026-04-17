@@ -10,11 +10,12 @@ export function registerLog(program: Command): void {
     .description("Append a session log entry to an issue")
     .option("--tokens <n>", "Tokens used in this session", "0")
     .option("--auditor <verdict>", `Auditor verdict (${VERDICTS.join("|")})`)
+    .option("--model <name>", "Model used in this session (e.g. claude-sonnet-4-6)")
     .action(
       (
         issueId: string,
         summary: string,
-        opts: { tokens: string; auditor?: string }
+        opts: { tokens: string; auditor?: string; model?: string }
       ) => {
         try {
           const tokens = parseInt(opts.tokens, 10);
@@ -34,10 +35,11 @@ export function registerLog(program: Command): void {
             auditor = opts.auditor as AuditorVerdict;
           }
 
-          const session = logSession(parseInt(issueId, 10), summary, tokens, auditor);
-          console.log(`Session logged for issue #${session.issueId} on ${session.date}`);
+          const session = logSession(parseInt(issueId, 10), summary, tokens, auditor, opts.model);
+          console.log(`Session logged for issue #${session.issueId} on ${session.createdAt.slice(0, 10)}`);
           if (tokens > 0) console.log(`  Tokens: ${tokens}`);
           if (auditor) console.log(`  Auditor: ${auditor.toUpperCase()}`);
+          if (session.model) console.log(`  Model: ${session.model}`);
         } catch (err) {
           console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(1);

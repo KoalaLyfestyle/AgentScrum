@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { getActiveSprint, getSprintSummary, listDod, listEpics, issueKey } from "../../services/scrum.js";
+import { getActiveSprint, getSprintSummary, getWorkPackage, listEpics, issueKey } from "../../services/scrum.js";
 import { requireProjectId } from "../projectContext.js";
 
 export function registerStatus(program: Command): void {
@@ -12,10 +12,11 @@ export function registerStatus(program: Command): void {
         const pid = requireProjectId();
         const sprint = getActiveSprint(pid);
         const summary = getSprintSummary(sprint.id);
-        const dod = listDod(pid);
+        // Use getWorkPackage with 0 capacity to get sprint-scoped DoD completion state
+        const { dod } = getWorkPackage(pid, 0);
 
         if (opts.json) {
-          console.log(JSON.stringify({ ...summary, dod: dod.map((d) => d.text) }, null, 2));
+          console.log(JSON.stringify({ ...summary, dod }, null, 2));
           return;
         }
 
@@ -39,8 +40,9 @@ export function registerStatus(program: Command): void {
         }
 
         if (dod.length > 0) {
-          console.log(`\nDoD (${dod.length} items):`);
-          for (const d of dod) console.log(`  [ ] ${d.text}`);
+          const done = dod.filter((d) => d.completed).length;
+          console.log(`\nDoD (${done}/${dod.length} complete):`);
+          for (const d of dod) console.log(`  ${d.completed ? "[x]" : "[ ]"} ${d.text}`);
         }
         console.log();
       } catch (err) {

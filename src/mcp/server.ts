@@ -295,6 +295,7 @@ server.registerTool(
         .enum(["pass", "fail", "skipped"])
         .optional()
         .describe("Auditor verdict (omit if not yet audited)"),
+      model: z.string().optional().describe("Model used in this session (e.g. claude-sonnet-4-6)"),
     },
   },
   (args) =>
@@ -303,7 +304,8 @@ server.registerTool(
         args.issue_id,
         args.summary,
         args.tokens_used,
-        args.auditor
+        args.auditor,
+        args.model
       );
       const detail = scrum.getIssueDetail(args.issue_id);
       return { session, issue_tokens_total: detail.tokensUsed };
@@ -357,6 +359,19 @@ server.registerTool(
     },
   },
   (args) => safe(() => scrum.addDodItem(args.project_id, args.text, args.order))
+);
+
+server.registerTool(
+  "scrum_complete_dod_item",
+  {
+    description:
+      "Mark a DoD item as completed for the current sprint. Call this as each DoD checklist item is satisfied — work_package shows [x]/[ ] per sprint. Idempotent: safe to call twice.",
+    inputSchema: {
+      sprint_id: z.number().int().describe("Sprint ID"),
+      dod_item_id: z.number().int().describe("DoD item ID (from the dod array in scrum_get_work_package)"),
+    },
+  },
+  (args) => safe(() => scrum.completeDodItem(args.sprint_id, args.dod_item_id))
 );
 
 // ---------------------------------------------------------------------------

@@ -64,6 +64,34 @@
       "when": 1776063368338,
       "tag": "0008_messy_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1776200000000,
+      "tag": "0009_sessions_created_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1776200001000,
+      "tag": "0010_sessions_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1776200002000,
+      "tag": "0011_issues_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1776200003000,
+      "tag": "0012_sprint_dod_completions",
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,7 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 |-------|-----------|
 | Backend | Node.js + TypeScript |
 | Database | SQLite via Drizzle ORM |
-| Agent interface | MCP server (stdio, 23 tools) |
+| Agent interface | MCP server (stdio, 26 tools) |
 | CLI | Commander.js (`scrum` command) |
 
 ## Quick Start
@@ -118,7 +118,7 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (25)
+## MCP Tools (26)
 
 ### Read
 | Tool | Description |
@@ -156,13 +156,14 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 |------|-------------|
 | `scrum_add_ac` | Add acceptance criterion to an issue |
 | `scrum_complete_ac` | Mark AC done |
-| `scrum_log_session` | Append session log (summary, tokens, auditor verdict) |
+| `scrum_log_session` | Append session log (summary, tokens, auditor verdict, optional model name) |
 
 ### Definition of Done
 | Tool | Description |
 |------|-------------|
 | `scrum_set_dod` | Replace entire project DoD checklist |
 | `scrum_add_dod_item` | Append a single item to the DoD |
+| `scrum_complete_dod_item` | Mark a DoD item as completed for the current sprint. Idempotent. Enables `[x]/[ ]` rendering in work_package and `scrum status`. |
 
 ### Knowledge
 | Tool | Description |

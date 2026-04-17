@@ -63,6 +63,8 @@ export interface Issue {
   claimedBy?: string | null;
   claimedAt?: string | null;
   createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
 }
 
 export interface AcceptanceCriterion {
@@ -76,10 +78,11 @@ export interface AcceptanceCriterion {
 export interface Session {
   id: number;
   issueId: number;
-  date: string; // ISO 8601 date
+  createdAt: string; // ISO 8601 full timestamp
   summary: string;
   tokensUsed: number;
   auditor?: AuditorVerdict;
+  model?: string | null;
 }
 
 export interface Decision {
@@ -126,15 +129,21 @@ export interface SprintSummary {
   activeIssue?: Issue;
 }
 
+export interface RetroIssue extends Issue {
+  cycleTimeHours?: number; // hours from first in_progress to done; undefined if timestamps missing
+}
+
 export interface Retrospective {
   sprintNumber: number;
   sprintTitle?: string;
   /** Issues that were or are currently blocked (have a blockerReason set). */
-  blockedIssues: Issue[];
+  blockedIssues: RetroIssue[];
   /** Done issues that still have uncompleted acceptance criteria. */
-  incompleteAcIssues: Issue[];
+  incompleteAcIssues: RetroIssue[];
   /** Issues whose token usage exceeds 2× the sprint median. */
-  expensiveIssues: Issue[];
+  expensiveIssues: RetroIssue[];
+  /** Cycle time summary for done issues with both timestamps. */
+  cycleTimeSummary?: { avgHours: number; minHours: number; maxHours: number; issueCount: number };
 }
 
 export interface CostReportIssue {
@@ -155,9 +164,23 @@ export interface CostReport {
   modelPrices?: Record<string, number>; // model → $/1M tokens used for calculation
 }
 
+export interface DodCompletion {
+  id: number;
+  sprintId: number;
+  dodItemId: number;
+  dodText: string;
+  completedAt: string;
+}
+
+export interface WorkPackageDodItem {
+  id: number;
+  text: string;
+  completed: boolean;
+}
+
 export interface WorkPackage {
   sprint: Sprint;
-  dod: string[];
+  dod: WorkPackageDodItem[];
   capacityRequested: number;
   capacityUsed: number;
   issues: IssueDetail[];

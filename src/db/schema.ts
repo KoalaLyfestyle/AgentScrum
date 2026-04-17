@@ -67,6 +67,8 @@ export const issues = sqliteTable("issues", {
   claimedBy: text("claimed_by"),
   claimedAt: text("claimed_at"),
   createdAt: text("created_at").notNull(),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
 });
 
 export const acceptanceCriteria = sqliteTable("acceptance_criteria", {
@@ -84,10 +86,11 @@ export const sessions = sqliteTable("sessions", {
   issueId: integer("issue_id", { mode: "number" })
     .notNull()
     .references(() => issues.id),
-  date: text("date").notNull(),
+  createdAt: text("created_at").notNull(),
   summary: text("summary").notNull(),
   tokensUsed: real("tokens_used").notNull().default(0),
   auditor: text("auditor", { enum: ["pass", "fail", "skipped"] }),
+  model: text("model"),
 });
 
 // Architecture Decision Records (ADR-lite)
@@ -117,6 +120,17 @@ export const projectDod = sqliteTable("project_dod", {
   text: text("text").notNull(),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull(),
+});
+
+// Per-sprint DoD completion tracking (no FK on dod_item_id — setDod() hard-deletes project_dod rows)
+export const sprintDodCompletions = sqliteTable("sprint_dod_completions", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  sprintId: integer("sprint_id", { mode: "number" })
+    .notNull()
+    .references(() => sprints.id),
+  dodItemId: integer("dod_item_id", { mode: "number" }).notNull(), // no FK — items may be hard-deleted
+  dodText: text("dod_text").notNull(), // snapshot at completion time
+  completedAt: text("completed_at").notNull(),
 });
 
 // Hard-learned lessons and failure post-mortems
