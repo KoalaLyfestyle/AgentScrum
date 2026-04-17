@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and, isNull, or, lt } from "drizzle-orm";
+import { eq, and, isNull, or, lt, sql } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type {
   Project,
@@ -15,12 +15,15 @@ import type {
   Decision,
   Lesson,
   DodItem,
+  DodCompletion,
+  WorkPackageDodItem,
   IssueDetail,
   SprintSummary,
   SprintVelocity,
   CostReport,
   CostReportIssue,
   Retrospective,
+  RetroIssue,
   WorkPackage,
   IssueStatus,
   IssueType,
@@ -549,17 +552,27 @@ export function getRetrospective(projectId: number, sprintNumber?: number): Retr
     sprint = all[all.length - 1]!;
   }
 
-  const issues = db
+  const rawIssues = db
     .select()
     .from(schema.issues)
     .where(eq(schema.issues.sprintId, sprint.id))
     .all() as Issue[];
 
+  // Enrich issues with cycle time (hours from startedAt to completedAt)
+  const issues: RetroIssue[] = rawIssues.map((i) => {
+    if (i.startedAt && i.completedAt) {
+      const cycleTimeHours =
+        (new Date(i.completedAt).getTime() - new Date(i.startedAt).getTime()) / 3_600_000;
+      return { ...i, cycleTimeHours };
+    }
+    return i;
+  });
+
   // Blocked issues: any issue that has a blockerReason (was blocked during the sprint)
   const blockedIssues = issues.filter((i) => i.blockerReason);
 
   // Incomplete AC issues: done issues with at least one uncompleted AC
-  const incompleteAcIssues: Issue[] = [];
+  const incompleteAcIssues: RetroIssue[] = [];
   for (const issue of issues.filter((i) => i.status === "done")) {
     const uncomplete = db
       .select()
@@ -571,7 +584,7 @@ export function getRetrospective(projectId: number, sprintNumber?: number): Retr
 
   // Expensive issues: tokensUsed > 2× sprint median (excluding zero-token issues)
   const tokenValues = issues.map((i) => i.tokensUsed).filter((t) => t > 0);
-  let expensiveIssues: Issue[] = [];
+  let expensiveIssues: RetroIssue[] = [];
   if (tokenValues.length > 0) {
     const sorted = [...tokenValues].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
@@ -583,12 +596,26 @@ export function getRetrospective(projectId: number, sprintNumber?: number): Retr
     expensiveIssues = issues.filter((i) => i.tokensUsed > threshold);
   }
 
+  // Cycle time summary across done issues with both timestamps
+  const timedIssues = issues.filter((i) => i.cycleTimeHours !== undefined);
+  let cycleTimeSummary: Retrospective["cycleTimeSummary"];
+  if (timedIssues.length > 0) {
+    const times = timedIssues.map((i) => i.cycleTimeHours!);
+    cycleTimeSummary = {
+      avgHours: times.reduce((a, b) => a + b, 0) / times.length,
+      minHours: Math.min(...times),
+      maxHours: Math.max(...times),
+      issueCount: times.length,
+    };
+  }
+
   return {
     sprintNumber: sprint.number,
     sprintTitle: sprint.title ?? undefined,
     blockedIssues,
     incompleteAcIssues,
     expensiveIssues,
+    cycleTimeSummary,
   };
 }
 
@@ -647,9 +674,20 @@ export function updateIssueStatus(issueId: number, status: IssueStatus, blockerR
     if (!reason) throw new Error("blockerReason is required when status is blocked");
     blockerReason = reason;
   }
-  const patch: { status: IssueStatus; blockerReason?: string } = { status };
+  const t = now();
+  const patch: Record<string, unknown> = { status };
   if (status === "blocked") {
-    patch.blockerReason = blockerReason;
+    patch["blockerReason"] = blockerReason;
+  }
+  if (status === "in_progress") {
+    // Preserve first start time — only set if not already set
+    patch["startedAt"] = sql`COALESCE(${schema.issues.startedAt}, ${t})`;
+    patch["completedAt"] = null;
+  } else if (status === "done") {
+    patch["completedAt"] = t;
+  } else if (status === "todo" || status === "review" || status === "blocked") {
+    // Reopened — clear completion timestamp
+    patch["completedAt"] = null;
   }
   const issue = db
     .update(schema.issues)
@@ -795,7 +833,8 @@ export function logSession(
   issueId: number,
   summary: string,
   tokensUsed: number = 0,
-  auditor?: AuditorVerdict
+  auditor?: AuditorVerdict,
+  model?: string
 ): Session {
   const db = getDb();
 
@@ -804,10 +843,11 @@ export function logSession(
       .insert(schema.sessions)
       .values({
         issueId,
-        date: today(),
+        createdAt: now(),
         summary,
         tokensUsed,
         auditor: auditor ?? null,
+        model: model ?? null,
       })
       .returning()
       .get();
@@ -884,13 +924,63 @@ export function getWorkPackage(projectId: number, capacity: number, agentId?: st
     capacityUsed += pts;
   }
 
+  // Load per-sprint DoD completion state
+  const completions = db
+    .select()
+    .from(schema.sprintDodCompletions)
+    .where(eq(schema.sprintDodCompletions.sprintId, sprint.id))
+    .all() as DodCompletion[];
+  const completedItemIds = new Set(completions.map((c) => c.dodItemId));
+
   return {
     sprint,
-    dod: dod.map((d) => d.text),
+    dod: dod.map((d): WorkPackageDodItem => ({ id: d.id, text: d.text, completed: completedItemIds.has(d.id) })),
     capacityRequested: capacity,
     capacityUsed,
     issues: selected,
   };
+}
+
+export function completeDodItem(sprintId: number, dodItemId: number): DodCompletion {
+  const db = getDb();
+  const item = db.select().from(schema.projectDod).where(eq(schema.projectDod.id, dodItemId)).get();
+  if (!item) throw new Error(`DoD item ${dodItemId} not found`);
+
+  const sprint = db.select().from(schema.sprints).where(eq(schema.sprints.id, sprintId)).get();
+  if (!sprint) throw new Error(`Sprint ${sprintId} not found`);
+  if (sprint.projectId !== item.projectId) {
+    throw new Error(`DoD item ${dodItemId} does not belong to sprint ${sprintId}'s project`);
+  }
+
+  // Atomic upsert: unique index on (sprint_id, dod_item_id) makes this safe under concurrent agents
+  const inserted = db
+    .insert(schema.sprintDodCompletions)
+    .values({ sprintId, dodItemId, dodText: item.text, completedAt: now() })
+    .onConflictDoNothing()
+    .returning()
+    .get();
+  if (inserted) return inserted as DodCompletion;
+
+  const existing = db
+    .select()
+    .from(schema.sprintDodCompletions)
+    .where(and(eq(schema.sprintDodCompletions.sprintId, sprintId), eq(schema.sprintDodCompletions.dodItemId, dodItemId)))
+    .get();
+  if (!existing) throw new Error("Failed to record DoD completion");
+  return existing as DodCompletion;
+}
+
+// Read-only: DoD items for a project merged with per-sprint completion state
+export function getSprintDodStatus(projectId: number, sprintId: number): WorkPackageDodItem[] {
+  const db = getDb();
+  const dod = listDod(projectId);
+  const completions = db
+    .select()
+    .from(schema.sprintDodCompletions)
+    .where(eq(schema.sprintDodCompletions.sprintId, sprintId))
+    .all() as DodCompletion[];
+  const completedIds = new Set(completions.map((c) => c.dodItemId));
+  return dod.map((d): WorkPackageDodItem => ({ id: d.id, text: d.text, completed: completedIds.has(d.id) }));
 }
 
 // --- Definition of Done ---
