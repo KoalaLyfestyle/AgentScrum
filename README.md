@@ -12,6 +12,8 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 | 2 | MCP server | ✓ Done |
 | 3 | Story points, work package, DoD | ✓ Done |
 | 4 | CLI polish, multi-project, edit operations | ✓ Done |
+| 5 | Claim locking, token velocity, cost reporting | ✓ Done |
+| 6 | Session model tracking, issue lifecycle timestamps, DoD per-sprint completion | ✓ Done |
 
 ## Stack
 
@@ -145,11 +147,10 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | Tool | Description |
 |------|-------------|
 | `scrum_create_issue` | Create issue with optional description and story points |
-| `scrum_update_issue` | Edit title, description, priority, type, or story points after creation |
+| `scrum_update_issue` | Edit title, description, priority, type, or story point estimate after creation |
 | `scrum_update_issue_status` | Transition issue status |
 | `scrum_assign_issue` | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). |
 | `scrum_release_issue` | Release an issue claim so other agents can pick it up. |
-| `scrum_update_issue` | Edit title, description, priority, type, or story point estimate after creation |
 
 ### Acceptance Criteria & Sessions
 | Tool | Description |
@@ -163,7 +164,7 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 |------|-------------|
 | `scrum_set_dod` | Replace entire project DoD checklist |
 | `scrum_add_dod_item` | Append a single item to the DoD |
-| `scrum_complete_dod_item` | Mark a DoD item as completed for the current sprint. Idempotent. Enables `[x]/[ ]` rendering in work_package and `scrum status`. |
+| `scrum_complete_dod_item` | Mark a DoD item as completed for the specified sprint. Idempotent. Enables `[x]/[ ]` rendering in work_package and `scrum status`. |
 
 ### Knowledge
 | Tool | Description |
