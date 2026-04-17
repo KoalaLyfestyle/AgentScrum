@@ -943,28 +943,44 @@ export function getWorkPackage(projectId: number, capacity: number, agentId?: st
 
 export function completeDodItem(sprintId: number, dodItemId: number): DodCompletion {
   const db = getDb();
-  const item = db
-    .select()
-    .from(schema.projectDod)
-    .where(eq(schema.projectDod.id, dodItemId))
-    .get();
+  const item = db.select().from(schema.projectDod).where(eq(schema.projectDod.id, dodItemId)).get();
   if (!item) throw new Error(`DoD item ${dodItemId} not found`);
 
-  // Upsert: if already completed, return existing row
+  const sprint = db.select().from(schema.sprints).where(eq(schema.sprints.id, sprintId)).get();
+  if (!sprint) throw new Error(`Sprint ${sprintId} not found`);
+  if (sprint.projectId !== item.projectId) {
+    throw new Error(`DoD item ${dodItemId} does not belong to sprint ${sprintId}'s project`);
+  }
+
+  // Atomic upsert: unique index on (sprint_id, dod_item_id) makes this safe under concurrent agents
+  const inserted = db
+    .insert(schema.sprintDodCompletions)
+    .values({ sprintId, dodItemId, dodText: item.text, completedAt: now() })
+    .onConflictDoNothing()
+    .returning()
+    .get();
+  if (inserted) return inserted as DodCompletion;
+
   const existing = db
     .select()
     .from(schema.sprintDodCompletions)
     .where(and(eq(schema.sprintDodCompletions.sprintId, sprintId), eq(schema.sprintDodCompletions.dodItemId, dodItemId)))
-    .get() as DodCompletion | undefined;
-  if (existing) return existing;
-
-  const completion = db
-    .insert(schema.sprintDodCompletions)
-    .values({ sprintId, dodItemId, dodText: item.text, completedAt: now() })
-    .returning()
     .get();
-  if (!completion) throw new Error("Failed to record DoD completion");
-  return completion as DodCompletion;
+  if (!existing) throw new Error("Failed to record DoD completion");
+  return existing as DodCompletion;
+}
+
+// Read-only: DoD items for a project merged with per-sprint completion state
+export function getSprintDodStatus(projectId: number, sprintId: number): WorkPackageDodItem[] {
+  const db = getDb();
+  const dod = listDod(projectId);
+  const completions = db
+    .select()
+    .from(schema.sprintDodCompletions)
+    .where(eq(schema.sprintDodCompletions.sprintId, sprintId))
+    .all() as DodCompletion[];
+  const completedIds = new Set(completions.map((c) => c.dodItemId));
+  return dod.map((d): WorkPackageDodItem => ({ id: d.id, text: d.text, completed: completedIds.has(d.id) }));
 }
 
 // --- Definition of Done ---

@@ -5,3 +5,5 @@ CREATE TABLE `sprint_dod_completions` (
   `dod_text` text NOT NULL,
   `completed_at` text NOT NULL
 );
+--> statement-breakpoint
+CREATE UNIQUE INDEX `uq_sprint_dod` ON `sprint_dod_completions` (`sprint_id`, `dod_item_id`);

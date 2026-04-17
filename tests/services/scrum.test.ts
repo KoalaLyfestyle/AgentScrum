@@ -448,3 +448,50 @@ describe("claim locking", () => {
     expect(pkg.issues.map((i) => i.id)).toContain(i1.id);
   });
 });
+
+describe("completeDodItem", () => {
+  it("marks a DoD item completed and getWorkPackage reflects it", () => {
+    const { project, sprint } = scrum.initProject("dod-complete-basic");
+    scrum.startSprint(sprint.id);
+    scrum.setDod(project.id, ["Run tests", "Commit"]);
+    const dod = scrum.listDod(project.id);
+    scrum.completeDodItem(sprint.id, dod[0]!.id);
+    const pkg = scrum.getWorkPackage(project.id, 0);
+    expect(pkg.dod[0]!.completed).toBe(true);
+    expect(pkg.dod[1]!.completed).toBe(false);
+  });
+
+  it("is idempotent — calling twice returns same record without duplicates", () => {
+    const { project, sprint } = scrum.initProject("dod-complete-idempotent");
+    scrum.startSprint(sprint.id);
+    scrum.setDod(project.id, ["Step 1"]);
+    const dod = scrum.listDod(project.id);
+    const first = scrum.completeDodItem(sprint.id, dod[0]!.id);
+    const second = scrum.completeDodItem(sprint.id, dod[0]!.id);
+    expect(first.id).toBe(second.id);
+    const pkg = scrum.getWorkPackage(project.id, 0);
+    expect(pkg.dod.filter((d) => d.completed)).toHaveLength(1);
+  });
+
+  it("per-sprint isolation — completion in sprint N does not affect sprint N+1", () => {
+    const { project, sprint: s1 } = scrum.initProject("dod-isolation");
+    scrum.startSprint(s1.id);
+    scrum.setDod(project.id, ["Step 1"]);
+    const dod = scrum.listDod(project.id);
+    scrum.completeDodItem(s1.id, dod[0]!.id);
+    scrum.closeSprint(s1.id);
+    const s2 = scrum.createSprint(project.id);
+    scrum.startSprint(s2.id);
+    const pkg = scrum.getWorkPackage(project.id, 0);
+    expect(pkg.dod[0]!.completed).toBe(false);
+  });
+
+  it("throws when DoD item does not belong to sprint's project", () => {
+    const { project: p1, sprint: s1 } = scrum.initProject("dod-cross-p1");
+    const { project: p2 } = scrum.initProject("dod-cross-p2");
+    scrum.startSprint(s1.id);
+    scrum.setDod(p2.id, ["Other project step"]);
+    const dodP2 = scrum.listDod(p2.id);
+    expect(() => scrum.completeDodItem(s1.id, dodP2[0]!.id)).toThrow(/does not belong/);
+  });
+});

@@ -365,7 +365,7 @@ server.registerTool(
   "scrum_complete_dod_item",
   {
     description:
-      "Mark a DoD item as completed for the current sprint. Call this as each DoD checklist item is satisfied — work_package shows [x]/[ ] per sprint. Idempotent: safe to call twice.",
+      "Mark a DoD item as completed for the specified sprint. Call this as each DoD checklist item is satisfied — work_package shows [x]/[ ] per sprint. Idempotent: safe to call twice.",
     inputSchema: {
       sprint_id: z.number().int().describe("Sprint ID"),
       dod_item_id: z.number().int().describe("DoD item ID (from the dod array in scrum_get_work_package)"),

@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
@@ -123,15 +123,19 @@ export const projectDod = sqliteTable("project_dod", {
 });
 
 // Per-sprint DoD completion tracking (no FK on dod_item_id — setDod() hard-deletes project_dod rows)
-export const sprintDodCompletions = sqliteTable("sprint_dod_completions", {
-  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
-  sprintId: integer("sprint_id", { mode: "number" })
-    .notNull()
-    .references(() => sprints.id),
-  dodItemId: integer("dod_item_id", { mode: "number" }).notNull(), // no FK — items may be hard-deleted
-  dodText: text("dod_text").notNull(), // snapshot at completion time
-  completedAt: text("completed_at").notNull(),
-});
+export const sprintDodCompletions = sqliteTable(
+  "sprint_dod_completions",
+  {
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+    sprintId: integer("sprint_id", { mode: "number" })
+      .notNull()
+      .references(() => sprints.id),
+    dodItemId: integer("dod_item_id", { mode: "number" }).notNull(), // no FK — items may be hard-deleted
+    dodText: text("dod_text").notNull(), // snapshot at completion time
+    completedAt: text("completed_at").notNull(),
+  },
+  (t) => ({ uqSprintDod: uniqueIndex("uq_sprint_dod").on(t.sprintId, t.dodItemId) })
+);
 
 // Hard-learned lessons and failure post-mortems
 export const lessons = sqliteTable("lessons", {

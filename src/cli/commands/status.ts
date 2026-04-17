@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { getActiveSprint, getSprintSummary, getWorkPackage, listEpics, issueKey } from "../../services/scrum.js";
+import { getActiveSprint, getSprintSummary, getSprintDodStatus, listEpics, issueKey } from "../../services/scrum.js";
 import { requireProjectId } from "../projectContext.js";
 
 export function registerStatus(program: Command): void {
@@ -12,8 +12,7 @@ export function registerStatus(program: Command): void {
         const pid = requireProjectId();
         const sprint = getActiveSprint(pid);
         const summary = getSprintSummary(sprint.id);
-        // Use getWorkPackage with 0 capacity to get sprint-scoped DoD completion state
-        const { dod } = getWorkPackage(pid, 0);
+        const dod = getSprintDodStatus(pid, sprint.id);
 
         if (opts.json) {
           console.log(JSON.stringify({ ...summary, dod }, null, 2));
