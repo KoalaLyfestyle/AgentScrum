@@ -9,6 +9,7 @@ STATUS.md
 .env
 .env.*
 !.env.schema
+.dmno/
 
 # Dependencies
 node_modules/

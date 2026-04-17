@@ -4,26 +4,6 @@ Scrum management for agent swarms. Exposes sprint state via an MCP server so any
 
 A cold-start agent calls `scrum_get_work_package` with a capacity in story points and receives a complete, fully-briefed task list (title, description, ACs, DoD) in one shot. No cascading reads.
 
-## Status
-
-| Sprint | Goal | Status |
-|--------|------|--------|
-| 1 | Data model + CLI | ✓ Done |
-| 2 | MCP server | ✓ Done |
-| 3 | Story points, work package, DoD | ✓ Done |
-| 4 | CLI polish, multi-project, edit operations | ✓ Done |
-| 5 | Claim locking, token velocity, cost reporting | ✓ Done |
-| 6 | Session model tracking, issue lifecycle timestamps, DoD per-sprint completion | ✓ Done |
-
-## Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Node.js + TypeScript |
-| Database | SQLite via Drizzle ORM |
-| Agent interface | MCP server (stdio, 26 tools) |
-| CLI | Commander.js (`scrum` command) |
-
 ## Quick Start
 
 ```bash
@@ -96,6 +76,7 @@ These conventions keep the backlog healthy and sprints predictable — for human
 **Sprint load** is a suggestion, not a contract. A cold-start agent with a full context window might take 20pt; a focused fix session might take 5pt. Pass your actual capacity to `scrum_get_work_package` and trust the prioritization — don't over-commit just to fill the sprint.
 
 **Sprint lifecycle:**
+
 1. **Planning** — create the sprint, assign issues, set story point estimates
 2. **Active** — one sprint active at a time; agents pull work via `scrum_get_work_package`
 3. **Closed** — run `retro` to surface blockers, incomplete ACs, and expensive issues before planning the next sprint
@@ -109,12 +90,15 @@ These conventions keep the backlog healthy and sprints predictable — for human
 ## Agent Usage Pattern
 
 **Session start** — one call gets everything:
+
 ```json
 scrum_get_work_package { "project_id": 1, "capacity": 20 }
 ```
+
 Returns: sprint state, DoD checklist, and fully-briefed issues (title, description, ACs) up to capacity in story points. No follow-up reads needed.
 
 **Session end** — log work and complete DoD:
+
 ```json
 scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
@@ -123,54 +107,60 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 ## MCP Tools (26)
 
 ### Read
-| Tool | Description |
-|------|-------------|
-| `scrum_get_current_sprint` | Active sprint + all issues + status summary |
-| `scrum_get_issue_detail` | Full issue: ACs, sessions, assignment |
-| `scrum_get_work_package` | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. Auto-releases stale claims (>30 min). Pass `agent_id` to include self-claimed issues and exclude issues claimed by others. |
-| `scrum_get_retrospective` | Sprint retrospective: blocked issues (with reasons), done issues with incomplete ACs, high-token issues. Omit `sprint_number` for last closed sprint. |
-| `scrum_get_velocity` | Velocity data for all closed sprints: story points, issues completed, and total tokens used. Includes per-agent token breakdown when `assigned_to` is set on issues. |
-| `scrum_get_cost_report` | Cost report for a sprint: tokens used and estimated USD cost per issue and sprint total. Requires `SCRUM_MODEL_PRICES` env var for dollar figures; tokens-only otherwise. |
+
+| Tool                       | Description                                                                                                                                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scrum_get_current_sprint` | Active sprint + all issues + status summary                                                                                                                                                                                                                         |
+| `scrum_get_issue_detail`   | Full issue: ACs, sessions, assignment                                                                                                                                                                                                                               |
+| `scrum_get_work_package`   | **One-shot fully-briefed work package.** Pass capacity in story points; returns todo issues in priority order with ACs and DoD embedded. Auto-releases stale claims (>30 min). Pass `agent_id` to include self-claimed issues and exclude issues claimed by others. |
+| `scrum_get_retrospective`  | Sprint retrospective: blocked issues (with reasons), done issues with incomplete ACs, high-token issues. Omit `sprint_number` for last closed sprint.                                                                                                               |
+| `scrum_get_velocity`       | Velocity data for all closed sprints: story points, issues completed, and total tokens used. Includes per-agent token breakdown when `assigned_to` is set on issues.                                                                                                |
+| `scrum_get_cost_report`    | Cost report for a sprint: tokens used and estimated USD cost per issue and sprint total. Requires `SCRUM_MODEL_PRICES` env var for dollar figures; tokens-only otherwise.                                                                                           |
 
 ### Project & Sprint
-| Tool | Description |
-|------|-------------|
-| `scrum_init_project` | Create project + Sprint 1 |
-| `scrum_create_epic` | Create an epic |
-| `scrum_update_epic` | Rename an epic |
-| `scrum_create_sprint` | Create next sprint (planning) |
-| `scrum_start_sprint` | Transition sprint → active |
-| `scrum_close_sprint` | Transition sprint → closed |
+
+| Tool                  | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `scrum_init_project`  | Create project + Sprint 1                           |
+| `scrum_create_epic`   | Create an epic                                      |
+| `scrum_update_epic`   | Rename an epic                                      |
+| `scrum_create_sprint` | Create next sprint (planning)                       |
+| `scrum_start_sprint`  | Transition sprint → active                          |
+| `scrum_close_sprint`  | Transition sprint → closed                          |
 | `scrum_update_sprint` | Update sprint title, goal, PR title, PR description |
 
 ### Issues
-| Tool | Description |
-|------|-------------|
-| `scrum_create_issue` | Create issue with optional description and story points |
-| `scrum_update_issue` | Edit title, description, priority, type, or story point estimate after creation |
-| `scrum_update_issue_status` | Transition issue status |
-| `scrum_assign_issue` | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). |
-| `scrum_release_issue` | Release an issue claim so other agents can pick it up. |
+
+| Tool                        | Description                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `scrum_create_issue`        | Create issue with optional description and story points                                                                         |
+| `scrum_update_issue`        | Edit title, description, priority, type, or story point estimate after creation                                                 |
+| `scrum_update_issue_status` | Transition issue status                                                                                                         |
+| `scrum_assign_issue`        | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). |
+| `scrum_release_issue`       | Release an issue claim so other agents can pick it up.                                                                          |
 
 ### Acceptance Criteria & Sessions
-| Tool | Description |
-|------|-------------|
-| `scrum_add_ac` | Add acceptance criterion to an issue |
-| `scrum_complete_ac` | Mark AC done |
+
+| Tool                | Description                                                                |
+| ------------------- | -------------------------------------------------------------------------- |
+| `scrum_add_ac`      | Add acceptance criterion to an issue                                       |
+| `scrum_complete_ac` | Mark AC done                                                               |
 | `scrum_log_session` | Append session log (summary, tokens, auditor verdict, optional model name) |
 
 ### Definition of Done
-| Tool | Description |
-|------|-------------|
-| `scrum_set_dod` | Replace entire project DoD checklist |
-| `scrum_add_dod_item` | Append a single item to the DoD |
+
+| Tool                      | Description                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `scrum_set_dod`           | Replace entire project DoD checklist                                                                                               |
+| `scrum_add_dod_item`      | Append a single item to the DoD                                                                                                    |
 | `scrum_complete_dod_item` | Mark a DoD item as completed for the specified sprint. Idempotent. Enables `[x]/[ ]` rendering in work_package and `scrum status`. |
 
 ### Knowledge
-| Tool | Description |
-|------|-------------|
-| `scrum_log_decision` | Record an architectural decision (ADR-lite). Include rejected alternatives. |
-| `scrum_log_lesson` | Record a failure or hard-learned lesson. The `dont_repeat` field is read by future agents. |
+
+| Tool                 | Description                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| `scrum_log_decision` | Record an architectural decision (ADR-lite). Include rejected alternatives.                |
+| `scrum_log_lesson`   | Record a failure or hard-learned lesson. The `dont_repeat` field is read by future agents. |
 
 ## CLI Commands
 
@@ -266,6 +256,7 @@ Token actuals (`tokens_used` per issue) are tracked for retrospective cost analy
 Project-wide checklist every agent must complete after finishing an issue. Returned in every `scrum_get_work_package` response so cold-start agents see it automatically.
 
 Set interactively on project init, or at any time:
+
 ```bash
 scrum myproject dod add "Run npm test"
 scrum myproject dod add "Commit changes"
@@ -273,6 +264,7 @@ scrum myproject dod add "Push to remote"
 ```
 
 Or via MCP (for PM agents):
+
 ```json
 scrum_set_dod { "project_id": 1, "items": ["Run npm test", "Commit", "Push"] }
 ```
@@ -296,21 +288,43 @@ SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost reporting
 ```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SCRUM_DB_PATH` | `./agentscrum.db` | SQLite path — use absolute path so CLI works from any directory |
-| `SCRUM_PROJECT_ID` | — | Used by MCP server and scripts; CLI takes project name as first argument |
-| `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts` |
-| `SCRUM_MODEL_PRICES` | — | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
+| Variable              | Default            | Description                                                                                                                                                                                                               |
+| --------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SCRUM_DB_PATH`       | `./agentscrum.db`  | SQLite path — use absolute path so CLI works from any directory                                                                                                                                                           |
+| `SCRUM_PROJECT_ID`    | —                  | Used by MCP server and scripts; CLI takes project name as first argument                                                                                                                                                  |
+| `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts`                                                                                                                                                                                         |
+| `SCRUM_MODEL_PRICES`  | —                  | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
 
-## Roadmap
+## Stack
+
+| Layer           | Technology                     |
+| --------------- | ------------------------------ |
+| Backend         | Node.js + TypeScript           |
+| Database        | SQLite via Drizzle ORM         |
+| Agent interface | MCP server (stdio, 26 tools)   |
+| CLI             | Commander.js (`scrum` command) |
+
+## Status
+
+| Sprint | Goal                                                                          | Status |
+| ------ | ----------------------------------------------------------------------------- | ------ |
+| 1      | Data model + CLI                                                              | ✓ Done |
+| 2      | MCP server                                                                    | ✓ Done |
+| 3      | Story points, work package, DoD                                               | ✓ Done |
+| 4      | CLI polish, multi-project, edit operations                                    | ✓ Done |
+| 5      | Claim locking, token velocity, cost reporting                                 | ✓ Done |
+| 6      | Session model tracking, issue lifecycle timestamps, DoD per-sprint completion | ✓ Done |
+
+## Roadmap (Open Issues)
 
 ### Near-term
+
 - Blocked issue reason field — structured blocker description on `blocked` status transition
 - `scrum_get_retrospective` — queries blocked issues, failed ACs, high-token issues for sprint summary
 - Token velocity per sprint/agent/model + cost reporting (`scrum_get_velocity`, `scrum_get_cost_report`, `scrum cost`)
 
 ### Medium-term
+
 - Multi-agent conflict detection — prevent two agents claiming the same issue simultaneously
 - Cost reporting — tokens × model price = sprint $ spend
 - SvelteKit sprint board dashboard
