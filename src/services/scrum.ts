@@ -683,10 +683,16 @@ export function updateIssueStatus(issueId: number, status: IssueStatus, blockerR
     // Preserve first start time — only set if not already set
     patch["startedAt"] = sql`COALESCE(${schema.issues.startedAt}, ${t})`;
     patch["completedAt"] = null;
+    patch["releasedAt"] = null;   // clear if re-opened
   } else if (status === "done") {
     patch["completedAt"] = t;
-  } else if (status === "todo" || status === "review" || status === "blocked") {
-    // Reopened — clear completion timestamp
+    // Close the cost window if not already closed by explicit release
+    patch["releasedAt"] = sql`COALESCE(${schema.issues.releasedAt}, ${t})`;
+  } else if (status === "blocked") {
+    patch["completedAt"] = null;
+    patch["releasedAt"] = sql`COALESCE(${schema.issues.releasedAt}, ${t})`;
+  } else if (status === "todo" || status === "review") {
+    // Reopened — clear completion timestamp, but preserve releasedAt record
     patch["completedAt"] = null;
   }
   const issue = db
@@ -707,14 +713,14 @@ function isClaimStale(claimedAt: string | null | undefined): boolean {
   return ageMs > CLAIM_TTL_MINUTES * 60_000;
 }
 
-export function assignIssue(issueId: number, agentId: string): Issue {
+export function assignIssue(issueId: number, agentId: string, sessionId?: string): Issue {
   const db = getDb();
   // Single conditional UPDATE — atomic under concurrent callers.
   // Succeeds only when: unclaimed, self-claimed, or claim is stale (>30 min old).
   const staleCutoff = new Date(Date.now() - CLAIM_TTL_MINUTES * 60_000).toISOString();
   const updated = db
     .update(schema.issues)
-    .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now() })
+    .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now(), claimSessionId: sessionId ?? null })
     .where(
       and(
         eq(schema.issues.id, issueId),
@@ -744,7 +750,7 @@ export function releaseIssue(issueId: number, agentId?: string): Issue {
   // Conditional WHERE — if agentId supplied, only release if that agent holds the claim.
   const updated = db
     .update(schema.issues)
-    .set({ claimedBy: null, claimedAt: null })
+    .set({ claimedBy: null, claimedAt: null, releasedAt: now() })
     .where(
       and(
         eq(schema.issues.id, issueId),

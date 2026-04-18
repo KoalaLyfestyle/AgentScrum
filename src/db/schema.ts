@@ -66,6 +66,8 @@ export const issues = sqliteTable("issues", {
   blockerReason: text("blocker_reason"),
   claimedBy: text("claimed_by"),
   claimedAt: text("claimed_at"),
+  claimSessionId: text("claim_session_id"),  // CC session ID at claim time
+  releasedAt: text("released_at"),            // when claim was released (release or terminal status)
   createdAt: text("created_at").notNull(),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
@@ -91,6 +93,7 @@ export const sessions = sqliteTable("sessions", {
   tokensUsed: real("tokens_used").notNull().default(0),
   auditor: text("auditor", { enum: ["pass", "fail", "skipped"] }),
   model: text("model"),
+  costUsd: real("cost_usd"),   // USD; null when COST_SOURCE≠transcript or collection failed
 });
 
 // Architecture Decision Records (ADR-lite)
