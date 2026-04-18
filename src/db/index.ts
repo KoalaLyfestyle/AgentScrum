@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema.js";
 
+// Use an absolute path via SCRUM_DB_PATH to avoid CWD-dependent resolution
+// when the MCP server is launched from a different working directory.
 const dbPath = process.env["SCRUM_DB_PATH"] ?? "./agentscrum.db";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
