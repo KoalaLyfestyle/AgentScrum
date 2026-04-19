@@ -20,6 +20,11 @@ import path from "path";
 import { getDb } from "../db/index.js";
 import * as scrum from "../services/scrum.js";
 
+// Session registry: cwd → CC session ID.
+// Populated by the agent calling scrum_register_session at PM phase start.
+// Required for COST_SOURCE=transcript — used to attribute tokens to issues.
+const sessionRegistry = new Map<string, string>();
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
@@ -239,7 +244,11 @@ server.registerTool(
       agent_id: z.string().describe("Agent identifier"),
     },
   },
-  (args) => safe(() => scrum.assignIssue(args.issue_id, args.agent_id))
+  (args) =>
+    safe(() => {
+      const sessionId = sessionRegistry.get(process.cwd()) ?? undefined;
+      return scrum.assignIssue(args.issue_id, args.agent_id, sessionId);
+    })
 );
 
 server.registerTool(
@@ -329,6 +338,26 @@ server.registerTool(
     },
   },
   (args) => safe(() => scrum.getWorkPackage(args.project_id, args.capacity, args.agent_id))
+);
+
+server.registerTool(
+  "scrum_register_session",
+  {
+    description:
+      "Register the Claude Code session ID for cost attribution. Call once at the start of each PM phase. " +
+      "The session ID is used by COST_SOURCE=transcript to locate the JSONL transcript file and attribute " +
+      "token usage to issues within this session's claim windows. " +
+      "To get the session ID: run Bash('echo $CLAUDE_SESSION_ID') — CC exposes it as an env var.",
+    inputSchema: {
+      session_id: z.string().describe("Claude Code session ID (run: echo $CLAUDE_SESSION_ID)"),
+      cwd: z.string().optional().describe("Working directory override (default: MCP server process.cwd())"),
+    },
+  },
+  (args) => {
+    const dir = args.cwd ?? process.cwd();
+    sessionRegistry.set(dir, args.session_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify({ registered: true, cwd: dir, session_id: args.session_id }, null, 2) }] };
+  }
 );
 
 // ---------------------------------------------------------------------------
