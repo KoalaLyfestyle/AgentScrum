@@ -16,6 +16,10 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
+import { createHash } from "crypto";
+import { readdirSync, statSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
 import { getDb } from "../db/index.js";
 import * as scrum from "../services/scrum.js";
@@ -24,6 +28,26 @@ import * as scrum from "../services/scrum.js";
 // Populated by the agent calling scrum_register_session at PM phase start.
 // Required for COST_SOURCE=transcript — used to attribute tokens to issues.
 const sessionRegistry = new Map<string, string>();
+
+/**
+ * Auto-discover the current Claude Code session ID from the transcript directory.
+ * CC writes JSONL transcripts to ~/.claude/projects/<sha256-of-cwd>/.
+ * The most recently modified .jsonl file is the current session.
+ */
+function discoverSessionId(cwd: string): string | undefined {
+  try {
+    const hash = createHash("sha256").update(cwd).digest("hex");
+    const projectDir = join(homedir(), ".claude", "projects", hash);
+    const files = readdirSync(projectDir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .map((f) => ({ name: f, mtime: statSync(join(projectDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    if (files.length === 0) return undefined;
+    return files[0]!.name.replace(/\.jsonl$/, "");
+  } catch {
+    return undefined;
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.resolve(__dirname, "../../drizzle");
@@ -345,18 +369,23 @@ server.registerTool(
   {
     description:
       "Register the Claude Code session ID for cost attribution. Call once at the start of each PM phase. " +
-      "The session ID is used by COST_SOURCE=transcript to locate the JSONL transcript file and attribute " +
-      "token usage to issues within this session's claim windows. " +
-      "To get the session ID: run Bash('echo $CLAUDE_SESSION_ID') — CC exposes it as an env var.",
+      "If session_id is omitted, the server auto-discovers it from the most recent JSONL transcript in " +
+      "~/.claude/projects/<project-hash>/. " +
+      "The session ID is used by COST_SOURCE=transcript to attribute token usage to issues via claim windows.",
     inputSchema: {
-      session_id: z.string().describe("Claude Code session ID (run: echo $CLAUDE_SESSION_ID)"),
-      cwd: z.string().optional().describe("Working directory override (default: MCP server process.cwd())"),
+      session_id: z.string().min(1).optional().describe(
+        "Claude Code session ID (UUID). If omitted, auto-discovered from transcript directory."
+      ),
     },
   },
   (args) => {
-    const dir = args.cwd ?? process.cwd();
-    sessionRegistry.set(dir, args.session_id);
-    return { content: [{ type: "text" as const, text: JSON.stringify({ registered: true, cwd: dir, session_id: args.session_id }, null, 2) }] };
+    const dir = process.cwd();
+    const sessionId = args.session_id ?? discoverSessionId(dir);
+    if (!sessionId) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ registered: false, error: "No session ID provided and none discoverable from transcript directory" }, null, 2) }] };
+    }
+    sessionRegistry.set(dir, sessionId);
+    return { content: [{ type: "text" as const, text: JSON.stringify({ registered: true, cwd: dir, session_id: sessionId }, null, 2) }] };
   }
 );
 
