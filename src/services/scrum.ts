@@ -683,7 +683,8 @@ export function updateIssueStatus(issueId: number, status: IssueStatus, blockerR
     // Preserve first start time — only set if not already set
     patch["startedAt"] = sql`COALESCE(${schema.issues.startedAt}, ${t})`;
     patch["completedAt"] = null;
-    patch["releasedAt"] = null;   // clear if re-opened
+    // re-open clears releasedAt; workflow contract requires fresh assignIssue call to set a new claimSessionId
+    patch["releasedAt"] = null;
   } else if (status === "done") {
     patch["completedAt"] = t;
     // Close the cost window if not already closed by explicit release

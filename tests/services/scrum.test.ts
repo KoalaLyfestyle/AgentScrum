@@ -449,6 +449,98 @@ describe("claim locking", () => {
   });
 });
 
+describe("cost windows", () => {
+  it("assignIssue with sessionId stores claimSessionId", () => {
+    const { project, sprint } = scrum.initProject("cw-session-id");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder", "sess-123");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.claimSessionId).toBe("sess-123");
+  });
+
+  it("releaseIssue sets releasedAt", () => {
+    const { project, sprint } = scrum.initProject("cw-release-at");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    scrum.releaseIssue(issue.id, "builder");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.releasedAt).toBeTruthy();
+    expect(typeof detail.releasedAt).toBe("string");
+  });
+
+  it("updateIssueStatus done sets releasedAt when not previously set", () => {
+    const { project, sprint } = scrum.initProject("cw-done-sets");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.updateIssueStatus(issue.id, "done");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.releasedAt).toBeTruthy();
+  });
+
+  it("updateIssueStatus done preserves releasedAt set by explicit release", () => {
+    const { project, sprint } = scrum.initProject("cw-done-coalesce");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    scrum.releaseIssue(issue.id, "builder");
+    const afterRelease = scrum.getIssueDetail(issue.id);
+    const t1 = afterRelease.releasedAt;
+    expect(t1).toBeTruthy();
+    scrum.updateIssueStatus(issue.id, "done");
+    const afterDone = scrum.getIssueDetail(issue.id);
+    expect(afterDone.releasedAt).toBe(t1);
+  });
+
+  it("updateIssueStatus blocked sets releasedAt", () => {
+    const { project, sprint } = scrum.initProject("cw-blocked-sets");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.updateIssueStatus(issue.id, "blocked", "waiting on external API");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.releasedAt).toBeTruthy();
+  });
+
+  it("updateIssueStatus in_progress clears releasedAt on re-open", () => {
+    const { project, sprint } = scrum.initProject("cw-reopen-clears");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.updateIssueStatus(issue.id, "done");
+    const afterDone = scrum.getIssueDetail(issue.id);
+    expect(afterDone.releasedAt).toBeTruthy();
+    scrum.updateIssueStatus(issue.id, "in_progress");
+    const afterReopen = scrum.getIssueDetail(issue.id);
+    expect(afterReopen.releasedAt).toBeNull();
+  });
+
+  it("updateIssueStatus todo and review preserve releasedAt", () => {
+    const { project, sprint } = scrum.initProject("cw-preserve");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    scrum.releaseIssue(issue.id, "builder");
+    const afterRelease = scrum.getIssueDetail(issue.id);
+    const t1 = afterRelease.releasedAt;
+    expect(t1).toBeTruthy();
+
+    scrum.updateIssueStatus(issue.id, "todo");
+    const afterTodo = scrum.getIssueDetail(issue.id);
+    expect(afterTodo.releasedAt).toBe(t1);
+
+    scrum.updateIssueStatus(issue.id, "review");
+    const afterReview = scrum.getIssueDetail(issue.id);
+    expect(afterReview.releasedAt).toBe(t1);
+  });
+});
+
 describe("completeDodItem", () => {
   it("marks a DoD item completed and getWorkPackage reflects it", () => {
     const { project, sprint } = scrum.initProject("dod-complete-basic");
