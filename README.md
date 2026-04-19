@@ -38,7 +38,7 @@ claude mcp add agentscrum \
 
 > `tsx` is a dev dependency — it's available at `node_modules/.bin/tsx` after `npm install`. No separate global install needed. Use the **absolute path** to the binary since Claude Code may not inherit your shell's `PATH`.
 
-Once registered, all 25 MCP tools are available in every Claude Code session.
+Once registered, all 27 MCP tools are available in every Claude Code session.
 
 ## Project Selection
 
@@ -136,8 +136,9 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | `scrum_create_issue`        | Create issue with optional description and story points                                                                         |
 | `scrum_update_issue`        | Edit title, description, priority, type, or story point estimate after creation                                                 |
 | `scrum_update_issue_status` | Transition issue status                                                                                                         |
-| `scrum_assign_issue`        | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). |
-| `scrum_release_issue`       | Release an issue claim so other agents can pick it up.                                                                          |
+| `scrum_assign_issue`        | Assign issue to an agent and atomically claim it. Returns an error if already claimed by a different agent (claim TTL: 30 min). Snapshots CC session ID for cost attribution. |
+| `scrum_release_issue`       | Release an issue claim so other agents can pick it up. Sets `released_at` to close the cost window.                            |
+| `scrum_register_session`    | Register the Claude Code session ID for cost attribution. Call once at PM phase start. Auto-discovers session ID from transcript directory if no argument given. |
 
 ### Acceptance Criteria & Sessions
 
@@ -145,7 +146,7 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 | ------------------- | -------------------------------------------------------------------------- |
 | `scrum_add_ac`      | Add acceptance criterion to an issue                                       |
 | `scrum_complete_ac` | Mark AC done                                                               |
-| `scrum_log_session` | Append session log (summary, tokens, auditor verdict, optional model name) |
+| `scrum_log_session` | Append session log (summary, tokens, auditor verdict, optional model name). In `COST_SOURCE=transcript` mode, auto-reads tokens and cost from the CC JSONL transcript. |
 
 ### Definition of Done
 
@@ -286,6 +287,7 @@ SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: ./agents
 OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
 SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost reporting
+COST_SOURCE=transcript                           # off | manual (default) | transcript
 ```
 
 | Variable              | Default            | Description                                                                                                                                                                                                               |
@@ -294,6 +296,7 @@ SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost 
 | `SCRUM_PROJECT_ID`    | —                  | Used by MCP server and scripts; CLI takes project name as first argument                                                                                                                                                  |
 | `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts`                                                                                                                                                                                         |
 | `SCRUM_MODEL_PRICES`  | —                  | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
+| `COST_SOURCE`         | `manual`           | Cost collection mode. `off` — no token tracking. `manual` — agent passes `tokens_used` to `scrum_log_session`. `transcript` — auto-reads tokens from Claude Code JSONL transcripts; requires `scrum_register_session` at session start and `scrum_assign_issue`/`scrum_release_issue` around each issue. |
 
 ## Stack
 
@@ -301,7 +304,7 @@ SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost 
 | --------------- | ------------------------------ |
 | Backend         | Node.js + TypeScript           |
 | Database        | SQLite via Drizzle ORM         |
-| Agent interface | MCP server (stdio, 26 tools)   |
+| Agent interface | MCP server (stdio, 27 tools)   |
 | CLI             | Commander.js (`scrum` command) |
 
 ## Status
