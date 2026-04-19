@@ -516,6 +516,12 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
       .all() as Session[];
     const hasCostUsd = sessionRows.some((s) => s.costUsd != null);
     if (hasCostUsd) {
+      const nullCostSessions = sessionRows.filter((s) => s.costUsd == null && s.tokensUsed > 0);
+      if (nullCostSessions.length > 0) {
+        process.stderr.write(
+          `[agentscrum/cost] warning: issue ${issue.id} has mixed cost modes — ${nullCostSessions.length} manual session(s) not included in estimated cost\n`
+        );
+      }
       entry.estimatedCost = sessionRows.reduce((sum, s) => sum + (s.costUsd ?? 0), 0);
     } else if (ratePerMillion !== undefined) {
       entry.estimatedCost = (issue.tokensUsed * ratePerMillion) / 1_000_000;
@@ -868,11 +874,24 @@ export async function logSession(
     const issue = db.select().from(schema.issues).where(eq(schema.issues.id, issueId)).get() as Issue | undefined;
     if (issue?.claimSessionId && issue.claimedAt) {
       const source = await getCostSource();
-      const from = issue.claimedAt;
+      // Use the most recent prior session createdAt as the window start (delta mode),
+      // or fall back to claimedAt if this is the first session for this claim.
+      const lastSession = db
+        .select({ createdAt: schema.sessions.createdAt })
+        .from(schema.sessions)
+        .where(eq(schema.sessions.issueId, issueId))
+        .orderBy(sql`${schema.sessions.createdAt} DESC`)
+        .limit(1)
+        .get();
+      const from = lastSession?.createdAt ?? issue.claimedAt;
       const to = issue.releasedAt ?? now();
       const data = await source.collect(issueId, issue.claimSessionId, from, to);
       finalTokens = data.tokensIn + data.tokensOut + data.cacheRead + data.cacheCreate;
       costUsd = data.costUsd;
+    } else {
+      process.stderr.write(
+        `[agentscrum/cost] warning: COST_SOURCE=transcript but issue ${issueId} has no claimSessionId — falling back to manual tokens\n`
+      );
     }
   } else if (costMode === "off") {
     // COST_SOURCE=off: finalTokens stays 0, costUsd stays null

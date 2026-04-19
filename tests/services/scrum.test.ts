@@ -347,6 +347,23 @@ describe("getVelocity", () => {
   });
 });
 
+describe("logSession COST_SOURCE=off", () => {
+  it("logSession with COST_SOURCE=off stores 0 tokens regardless of arg", async () => {
+    process.env["COST_SOURCE"] = "off";
+    try {
+      const { project, sprint } = scrum.initProject("off-mode-test");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      const session = await scrum.logSession(issue.id, "test", 999);
+      expect(session.tokensUsed).toBe(0);
+      expect(session.costUsd).toBeNull();
+    } finally {
+      delete process.env["COST_SOURCE"];
+    }
+  });
+});
+
 describe("getCostReport", () => {
   it("returns tokens only when SCRUM_MODEL_PRICES is not set", async () => {
     delete process.env["SCRUM_MODEL_PRICES"];
@@ -372,6 +389,26 @@ describe("getCostReport", () => {
     expect(report.totalTokens).toBe(1_000_000);
     expect(report.totalCost).toBeCloseTo(3.0);
     delete process.env["SCRUM_MODEL_PRICES"];
+  });
+
+  it("getCostReport uses session.cost_usd when present", async () => {
+    delete process.env["SCRUM_MODEL_PRICES"];
+    const { project, sprint } = scrum.initProject("cost-usd-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    // Log a session with some tokens (manual mode, no costUsd)
+    const session = await scrum.logSession(issue.id, "did stuff", 500);
+    // Inject a costUsd value directly via the DB to simulate transcript mode
+    const { eq: deq } = await import("drizzle-orm");
+    db.getDb()
+      .update(db.schema.sessions)
+      .set({ costUsd: 1.23 })
+      .where(deq(db.schema.sessions.id, session.id))
+      .run();
+    const report = scrum.getCostReport(project.id);
+    expect(report.issues[0]!.estimatedCost).toBeCloseTo(1.23);
+    expect(report.totalCost).toBeCloseTo(1.23);
   });
 });
 
