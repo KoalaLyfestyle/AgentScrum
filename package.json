@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "mcp": "tsx src/mcp/server.ts",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "dev:dashboard": "cd dashboard && npm run dev"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -280,6 +280,33 @@ npx tsx scripts/export-sprint.ts --sprint <N> [--project <id>]
 # Writes: projects/<name>/sprints/sprint-N.md, decisions/, lessons/
 ```
 
+## Dashboard
+
+A read-only SvelteKit web dashboard that reads directly from the AgentScrum SQLite DB. Three tabs: **Sprint Board**, **Velocity**, and **Token Usage**.
+
+```bash
+# Run the dashboard dev server (port 5173)
+npm run dev:dashboard
+
+# Or from dashboard/ directly
+cd dashboard && npm run dev
+```
+
+**Environment variables for the dashboard:**
+
+```bash
+AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agentscrum.db)
+```
+
+**URL params:**
+
+| Param | Values | Description |
+|-------|--------|-------------|
+| `?project=<id>` | integer | Select project (default: first project in DB) |
+| `?nav=topbar` | topbar (default) | Show full top nav (standalone mode) |
+| `?nav=none` | none | Hide nav entirely (embed mode for Orion main dashboard) |
+| `#board`, `#velocity`, `#tokens` | hash | Active tab |
+
 ## Environment Variables
 
 ```bash
