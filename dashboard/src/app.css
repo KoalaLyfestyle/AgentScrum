@@ -1,1 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400..800&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap');
 @import "tailwindcss";
+
+body {
+  background-color: #06080a;
+  color: #f0ede8;
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 120% 90% at 35% 45%, rgba(180,40,20,0.35) 0%, transparent 58%),
+    radial-gradient(ellipse 100% 80% at 65% 60%, rgba(120,25,10,0.22) 0%, transparent 60%),
+    radial-gradient(ellipse  60% 55% at 55% 30%, rgba(200,80,20,0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 100% 80% at  0% 100%, rgba(60,10,5,0.60) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 100%  0%, rgba(60,10,5,0.60) 0%, transparent 50%);
+}
+
+.glass-enhanced {
+  background: rgba(22, 13, 10, 0.62);
+  border-top: 1px solid rgba(255, 160, 120, 0.20);
+  border-left: 1px solid rgba(255, 160, 120, 0.12);
+  border-right: 1px solid rgba(255, 100, 60, 0.06);
+  border-bottom: 1px solid rgba(255, 100, 60, 0.04);
+  backdrop-filter: blur(24px) saturate(160%) brightness(1.06);
+  border-radius: 0.75rem;
+  box-shadow: 0 0 0 0.5px rgba(255,140,80,0.08) inset, 0 8px 32px rgba(0,0,0,0.55);
+}
+
+.glass-standard {
+  background: rgba(255, 120, 60, 0.04);
+  border: 1px solid rgba(255, 160, 100, 0.08);
+  backdrop-filter: blur(14px) saturate(130%);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+
+.badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6875rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  font-weight: 500;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.badge-done      { background: rgba(52,211,153,0.10);  color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
+.badge-inprogress{ background: rgba(232,64,42,0.10);   color: #e8402a; border: 1px solid rgba(232,64,42,0.2); }
+.badge-review    { background: rgba(251,191,36,0.10);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.badge-blocked   { background: rgba(251,146,60,0.10);  color: #fb923c; border: 1px solid rgba(251,146,60,0.2); }
+.badge-todo      { background: rgba(160,136,128,0.10); color: #a08880; border: 1px solid rgba(160,136,128,0.2); }
+
+.table-row-hover:hover { background-color: rgba(255, 80, 40, 0.04); }

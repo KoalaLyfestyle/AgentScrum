@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import SprintBoard from '$lib/components/SprintBoard.svelte';
+	import VelocityTab from '$lib/components/VelocityTab.svelte';
+	import TokenUsage from '$lib/components/TokenUsage.svelte';
+
+	let { data } = $props();
 
 	const tabs = ['board', 'velocity', 'tokens'] as const;
 	type Tab = (typeof tabs)[number];
@@ -47,27 +52,31 @@
 					onchange={(e) => setProject(Number((e.target as HTMLSelectElement).value))}
 					class="bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-white"
 				>
-					<option value={1}>agentscrum</option>
+					{#each data.projects as project}
+						<option value={project.id}>{project.name}</option>
+					{/each}
 				</select>
 			</div>
 		</header>
 	{/if}
 
-	<main class="p-6">
+	<main class="p-6 max-w-7xl mx-auto">
+		<div class="app-bg"></div>
 		{#if activeTab === 'board'}
 			<div id="board-tab">
-				<!-- Sprint Board: populated by I3 -->
-				<p class="text-white/40 text-sm">Sprint Board — loading component in I3</p>
+				{#if data.sprint}
+					<SprintBoard data={data.sprint} />
+				{:else}
+					<p class="text-[#a08880] text-sm">No active sprint found.</p>
+				{/if}
 			</div>
 		{:else if activeTab === 'velocity'}
 			<div id="velocity-tab">
-				<!-- Velocity: populated by I4 -->
-				<p class="text-white/40 text-sm">Velocity — loading component in I4</p>
+				<VelocityTab data={data.velocity} />
 			</div>
 		{:else if activeTab === 'tokens'}
 			<div id="tokens-tab">
-				<!-- Token Usage: populated by I5 -->
-				<p class="text-white/40 text-sm">Token Usage — loading component in I5</p>
+				<TokenUsage costs={data.costs} retro={data.retro} velocity={data.velocity} />
 			</div>
 		{/if}
 	</main>
