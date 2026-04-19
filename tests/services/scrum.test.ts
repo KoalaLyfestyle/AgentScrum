@@ -380,15 +380,18 @@ describe("getCostReport", () => {
 
   it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", async () => {
     process.env["SCRUM_MODEL_PRICES"] = JSON.stringify({ "claude-sonnet-4-6": 3.0 });
-    const { project, sprint } = scrum.initProject("cost-with-price");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    await scrum.logSession(issue.id, "did stuff", 1_000_000);
-    const report = scrum.getCostReport(project.id);
-    expect(report.totalTokens).toBe(1_000_000);
-    expect(report.totalCost).toBeCloseTo(3.0);
-    delete process.env["SCRUM_MODEL_PRICES"];
+    try {
+      const { project, sprint } = scrum.initProject("cost-with-price");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      await scrum.logSession(issue.id, "did stuff", 1_000_000);
+      const report = scrum.getCostReport(project.id);
+      expect(report.totalTokens).toBe(1_000_000);
+      expect(report.totalCost).toBeCloseTo(3.0);
+    } finally {
+      delete process.env["SCRUM_MODEL_PRICES"];
+    }
   });
 
   it("getCostReport uses session.cost_usd when present", async () => {

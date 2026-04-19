@@ -52,7 +52,7 @@ const RELEASE_BASE_DESCRIPTION =
  */
 export function discoverSessionId(cwd: string, projectsBaseDir?: string): string | undefined {
   try {
-    const encoded = cwd.replace(/\//g, "-");
+    const encoded = cwd.replace(/[/\\]/g, "-");
     const base = projectsBaseDir ?? path.join(homedir(), ".claude", "projects");
     const projectDir = path.join(base, encoded);
     const files = readdirSync(projectDir)
@@ -393,15 +393,16 @@ server.registerTool(
       ),
     },
   },
-  (args) => {
-    const dir = process.cwd();
-    const sessionId = args.session_id ?? discoverSessionId(dir);
-    if (!sessionId) {
-      return { content: [{ type: "text" as const, text: JSON.stringify({ registered: false, error: "No session ID provided and none discoverable from transcript directory" }, null, 2) }] };
-    }
-    sessionRegistry.set(dir, sessionId);
-    return { content: [{ type: "text" as const, text: JSON.stringify({ registered: true, cwd: dir, session_id: sessionId }, null, 2) }] };
-  }
+  (args) =>
+    safe(() => {
+      const dir = process.cwd();
+      const sessionId = args.session_id ?? discoverSessionId(dir);
+      if (!sessionId) {
+        throw new Error("No session ID provided and none discoverable from transcript directory");
+      }
+      sessionRegistry.set(dir, sessionId);
+      return { registered: true, cwd: dir, session_id: sessionId };
+    })
 );
 
 // ---------------------------------------------------------------------------

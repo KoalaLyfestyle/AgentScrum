@@ -42,10 +42,8 @@ export class TranscriptCostSource implements CostSource {
     if (!transcriptPath) return { ...ZERO_COST };
 
     try {
-      const lines = fs
-        .readFileSync(transcriptPath, "utf-8")
-        .split("\n")
-        .filter(Boolean);
+      const raw = await fs.promises.readFile(transcriptPath, "utf-8");
+      const lines = raw.split("\n").filter(Boolean);
       return this.sumUsageInWindow(lines, from, to);
     } catch {
       process.stderr.write(
@@ -62,7 +60,7 @@ export class TranscriptCostSource implements CostSource {
 
     // Real CC path: ~/.claude/projects/<cwd-with-slashes-as-hyphens>/<sessionId>.jsonl
     // Encoding matches discoverSessionId in src/mcp/server.ts
-    const encoded = process.cwd().replace(/\//g, "-");
+    const encoded = process.cwd().replace(/[/\\]/g, "-");
     const hashed = path.join(
       this.projectsDir,
       encoded,

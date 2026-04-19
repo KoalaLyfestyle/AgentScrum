@@ -3,7 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and, isNull, or, lt, sql } from "drizzle-orm";
+import { eq, and, isNull, or, lt, sql, inArray } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { getCostSource } from "../cost/index.js";
 import type {
@@ -497,6 +497,18 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
   const firstModel = modelPrices ? Object.keys(modelPrices).sort()[0] : undefined;
   const ratePerMillion = firstModel !== undefined ? modelPrices![firstModel] : undefined;
 
+  // Fetch all sessions for this sprint in a single query to avoid N+1
+  const issueIds = allIssues.map((i) => i.id);
+  const allSessions: Session[] = issueIds.length > 0
+    ? (db.select().from(schema.sessions).where(inArray(schema.sessions.issueId, issueIds)).all() as Session[])
+    : [];
+  const sessionsByIssue = new Map<number, Session[]>();
+  for (const s of allSessions) {
+    const bucket = sessionsByIssue.get(s.issueId) ?? [];
+    bucket.push(s);
+    sessionsByIssue.set(s.issueId, bucket);
+  }
+
   const issues: CostReportIssue[] = allIssues.map((issue) => {
     const epicNum = epicNumberMap[issue.epicId] ?? issue.epicId;
     const key = issueKey(epicNum, issue.number);
@@ -509,11 +521,7 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
     if (issue.assignedTo) entry.assignedTo = issue.assignedTo;
 
     // Prefer authoritative cost_usd from transcript mode; fall back to price-list multiplication
-    const sessionRows = db
-      .select()
-      .from(schema.sessions)
-      .where(eq(schema.sessions.issueId, issue.id))
-      .all() as Session[];
+    const sessionRows = sessionsByIssue.get(issue.id) ?? [];
     const hasCostUsd = sessionRows.some((s) => s.costUsd != null);
     if (hasCostUsd) {
       const nullCostSessions = sessionRows.filter((s) => s.costUsd == null && s.tokensUsed > 0);
@@ -883,7 +891,9 @@ export async function logSession(
         .orderBy(sql`${schema.sessions.createdAt} DESC`)
         .limit(1)
         .get();
-      const from = lastSession?.createdAt ?? issue.claimedAt;
+      // Clamp to current claim's claimedAt to exclude usage from any prior claim
+      const rawFrom = lastSession?.createdAt ?? issue.claimedAt;
+      const from = rawFrom > issue.claimedAt ? rawFrom : issue.claimedAt;
       const to = issue.releasedAt ?? now();
       const data = await source.collect(issueId, issue.claimSessionId, from, to);
       finalTokens = data.tokensIn + data.tokensOut + data.cacheRead + data.cacheCreate;

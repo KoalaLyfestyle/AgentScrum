@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 import { discoverSessionId } from "../../src/mcp/server.js";
 
 describe("discoverSessionId", () => {
-  const tmpBase = "/tmp/test-claude-projects";
-  const cwd = "/Users/winston/Orion/projects/agentscrum";
-  const encoded = cwd.replace(/\//g, "-");
+  const tmpBase = join(tmpdir(), `agentscrum-test-${process.pid}`);
+  // Synthetic cwd — does not need to be a real path, just reproducible encoding
+  const cwd = "/test/projects/myproject";
+  const encoded = cwd.replace(/[/\\]/g, "-");
   const projectDir = join(tmpBase, encoded);
 
   beforeEach(() => {
