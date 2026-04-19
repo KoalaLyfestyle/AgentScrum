@@ -57,11 +57,11 @@ migrate(getDb(), { migrationsFolder });
 const server = new McpServer({ name: "agentscrum", version: "0.1.0" });
 
 // Helper: wrap handler to catch errors and return them as isError responses
-function safe<T>(
-  fn: () => T
-): { content: [{ type: "text"; text: string }]; isError?: boolean } {
+async function safe<T>(
+  fn: () => T | Promise<T>
+): Promise<{ content: [{ type: "text"; text: string }]; isError?: boolean }> {
   try {
-    const result = fn();
+    const result = await fn();
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (err) {
     return {
@@ -330,9 +330,9 @@ server.registerTool(
       model: z.string().optional().describe("Model used in this session (e.g. claude-sonnet-4-6)"),
     },
   },
-  (args) =>
-    safe(() => {
-      const session = scrum.logSession(
+  async (args) =>
+    safe(async () => {
+      const session = await scrum.logSession(
         args.issue_id,
         args.summary,
         args.tokens_used,

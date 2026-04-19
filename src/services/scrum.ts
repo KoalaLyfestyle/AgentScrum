@@ -5,6 +5,7 @@
 
 import { eq, and, isNull, or, lt, sql } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
+import { getCostSource } from "../cost/index.js";
 import type {
   Project,
   Epic,
@@ -506,9 +507,20 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
       tokensUsed: issue.tokensUsed,
     };
     if (issue.assignedTo) entry.assignedTo = issue.assignedTo;
-    if (ratePerMillion !== undefined) {
+
+    // Prefer authoritative cost_usd from transcript mode; fall back to price-list multiplication
+    const sessionRows = db
+      .select()
+      .from(schema.sessions)
+      .where(eq(schema.sessions.issueId, issue.id))
+      .all() as Session[];
+    const hasCostUsd = sessionRows.some((s) => s.costUsd != null);
+    if (hasCostUsd) {
+      entry.estimatedCost = sessionRows.reduce((sum, s) => sum + (s.costUsd ?? 0), 0);
+    } else if (ratePerMillion !== undefined) {
       entry.estimatedCost = (issue.tokensUsed * ratePerMillion) / 1_000_000;
     }
+
     return entry;
   });
 
@@ -519,7 +531,11 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
     issues,
     totalTokens,
   };
-  if (ratePerMillion !== undefined) {
+  // Total cost: sum issue estimatedCosts when available, else fall back to token × rate
+  const hasIssueCosts = issues.some((i) => i.estimatedCost !== undefined);
+  if (hasIssueCosts) {
+    report.totalCost = issues.reduce((sum, i) => sum + (i.estimatedCost ?? 0), 0);
+  } else if (ratePerMillion !== undefined) {
     report.totalCost = (totalTokens * ratePerMillion) / 1_000_000;
   }
   if (modelPrices) {
@@ -836,14 +852,33 @@ export function completeAc(acId: number): AcceptanceCriterion {
 
 // --- Sessions ---
 
-export function logSession(
+export async function logSession(
   issueId: number,
   summary: string,
   tokensUsed: number = 0,
   auditor?: AuditorVerdict,
   model?: string
-): Session {
+): Promise<Session> {
   const db = getDb();
+  let finalTokens = tokensUsed;
+  let costUsd: number | null = null;
+
+  const costMode = process.env["COST_SOURCE"] ?? "manual";
+  if (costMode === "transcript") {
+    const issue = db.select().from(schema.issues).where(eq(schema.issues.id, issueId)).get() as Issue | undefined;
+    if (issue?.claimSessionId && issue.claimedAt) {
+      const source = await getCostSource();
+      const from = issue.claimedAt;
+      const to = issue.releasedAt ?? now();
+      const data = await source.collect(issueId, issue.claimSessionId, from, to);
+      finalTokens = data.tokensIn + data.tokensOut + data.cacheRead + data.cacheCreate;
+      costUsd = data.costUsd;
+    }
+  } else if (costMode === "off") {
+    // COST_SOURCE=off: finalTokens stays 0, costUsd stays null
+    finalTokens = 0;
+  }
+  // costMode==="manual": finalTokens stays as passed in, costUsd stays null
 
   return db.transaction((tx) => {
     const session = tx
@@ -852,9 +887,10 @@ export function logSession(
         issueId,
         createdAt: now(),
         summary,
-        tokensUsed,
+        tokensUsed: finalTokens,
         auditor: auditor ?? null,
         model: model ?? null,
+        costUsd: costUsd,
       })
       .returning()
       .get();
@@ -868,7 +904,7 @@ export function logSession(
       .get();
     if (issueRow) {
       tx.update(schema.issues)
-        .set({ tokensUsed: issueRow.tokensUsed + tokensUsed })
+        .set({ tokensUsed: issueRow.tokensUsed + finalTokens })
         .where(eq(schema.issues.id, issueId))
         .run();
     }

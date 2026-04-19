@@ -89,12 +89,12 @@ describe("addAc / completeAc", () => {
 });
 
 describe("logSession", () => {
-  it("logs a session and increments tokensUsed on issue", () => {
+  it("logs a session and increments tokensUsed on issue", async () => {
     const { project, sprint } = scrum.initProject("log-test");
     const epic = scrum.createEpic(project.id, "E1");
     const issue = scrum.createIssue(epic.id, sprint.id, "Log issue");
 
-    const session = scrum.logSession(issue.id, "Did some work", 500, "pass");
+    const session = await scrum.logSession(issue.id, "Did some work", 500, "pass");
     expect(session.summary).toBe("Did some work");
     expect(session.tokensUsed).toBe(500);
     expect(session.auditor).toBe("pass");
@@ -348,26 +348,26 @@ describe("getVelocity", () => {
 });
 
 describe("getCostReport", () => {
-  it("returns tokens only when SCRUM_MODEL_PRICES is not set", () => {
+  it("returns tokens only when SCRUM_MODEL_PRICES is not set", async () => {
     delete process.env["SCRUM_MODEL_PRICES"];
     const { project, sprint } = scrum.initProject("cost-no-price");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
     const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    scrum.logSession(issue.id, "did stuff", 1000);
+    await scrum.logSession(issue.id, "did stuff", 1000);
     const report = scrum.getCostReport(project.id);
     expect(report.totalTokens).toBe(1000);
     expect(report.totalCost).toBeUndefined();
     expect(report.issues[0]!.estimatedCost).toBeUndefined();
   });
 
-  it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", () => {
+  it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", async () => {
     process.env["SCRUM_MODEL_PRICES"] = JSON.stringify({ "claude-sonnet-4-6": 3.0 });
     const { project, sprint } = scrum.initProject("cost-with-price");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
     const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    scrum.logSession(issue.id, "did stuff", 1_000_000);
+    await scrum.logSession(issue.id, "did stuff", 1_000_000);
     const report = scrum.getCostReport(project.id);
     expect(report.totalTokens).toBe(1_000_000);
     expect(report.totalCost).toBeCloseTo(3.0);
