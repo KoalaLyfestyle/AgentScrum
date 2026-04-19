@@ -1,9 +1,11 @@
 import { describe, it, expect } from "@jest/globals";
-import { join } from "path";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { TranscriptCostSource } from "../../src/cost/transcript.js";
 import type { CostData } from "../../src/cost/types.js";
 
-const fixtureDir = join("/Users/winston/Orion/projects/agentscrum", "tests/cost/fixtures");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixtureDir = join(__dirname, "fixtures");
 
 const SESSION_ID = "sample-session";
 const WINDOW_START = "2026-04-18T09:30:00.000Z";

@@ -90,7 +90,8 @@ export class TranscriptCostSource implements CostSource {
       }
       if (entry.type !== "assistant") continue;
       const ts = entry.timestamp;
-      if (!ts || ts < from || ts > to) continue;
+      // window is [from, to) — inclusive start, exclusive end to prevent boundary double-counting
+      if (!ts || ts < from || ts >= to) continue;
 
       const usage = entry.message?.usage;
       if (!usage) continue;
