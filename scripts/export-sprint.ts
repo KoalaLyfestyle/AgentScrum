@@ -125,8 +125,8 @@ const issueRows = issues
 const sessionSections = issues
   .map((issue) => {
     const sessions = db
-      .prepare("SELECT * FROM sessions WHERE issue_id = ? ORDER BY date")
-      .all(issue.id) as Array<{ date: string; summary: string; tokens_used: number; auditor: string | null }>;
+      .prepare("SELECT * FROM sessions WHERE issue_id = ? ORDER BY created_at")
+      .all(issue.id) as Array<{ created_at: string; summary: string; tokens_used: number; auditor: string | null }>;
 
     const acs = db
       .prepare("SELECT * FROM acceptance_criteria WHERE issue_id = ? ORDER BY id")
@@ -139,7 +139,7 @@ const sessionSections = issues
       .map((s) => {
         const verdict = s.auditor ? ` [${s.auditor.toUpperCase()}]` : "";
         const tokens = s.tokens_used > 0 ? ` _(${s.tokens_used} tokens)_` : "";
-        return `- **${s.date}**${verdict}${tokens}: ${s.summary}`;
+        return `- **${s.created_at.slice(0, 10)}**${verdict}${tokens}: ${s.summary}`;
       })
       .join("\n");
 

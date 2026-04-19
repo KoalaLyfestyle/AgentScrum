@@ -62,6 +62,8 @@ export interface Issue {
   blockerReason?: string | null;
   claimedBy?: string | null;
   claimedAt?: string | null;
+  claimSessionId?: string | null;  // CC session ID at claim time
+  releasedAt?: string | null;      // when claim was released (release or terminal status)
   createdAt: string;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -83,6 +85,7 @@ export interface Session {
   tokensUsed: number;
   auditor?: AuditorVerdict;
   model?: string | null;
+  costUsd?: number | null;  // USD; null when COST_SOURCE≠transcript or collection failed
 }
 
 export interface Decision {

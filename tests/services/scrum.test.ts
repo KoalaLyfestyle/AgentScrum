@@ -89,12 +89,12 @@ describe("addAc / completeAc", () => {
 });
 
 describe("logSession", () => {
-  it("logs a session and increments tokensUsed on issue", () => {
+  it("logs a session and increments tokensUsed on issue", async () => {
     const { project, sprint } = scrum.initProject("log-test");
     const epic = scrum.createEpic(project.id, "E1");
     const issue = scrum.createIssue(epic.id, sprint.id, "Log issue");
 
-    const session = scrum.logSession(issue.id, "Did some work", 500, "pass");
+    const session = await scrum.logSession(issue.id, "Did some work", 500, "pass");
     expect(session.summary).toBe("Did some work");
     expect(session.tokensUsed).toBe(500);
     expect(session.auditor).toBe("pass");
@@ -347,31 +347,71 @@ describe("getVelocity", () => {
   });
 });
 
+describe("logSession COST_SOURCE=off", () => {
+  it("logSession with COST_SOURCE=off stores 0 tokens regardless of arg", async () => {
+    process.env["COST_SOURCE"] = "off";
+    try {
+      const { project, sprint } = scrum.initProject("off-mode-test");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      const session = await scrum.logSession(issue.id, "test", 999);
+      expect(session.tokensUsed).toBe(0);
+      expect(session.costUsd).toBeNull();
+    } finally {
+      delete process.env["COST_SOURCE"];
+    }
+  });
+});
+
 describe("getCostReport", () => {
-  it("returns tokens only when SCRUM_MODEL_PRICES is not set", () => {
+  it("returns tokens only when SCRUM_MODEL_PRICES is not set", async () => {
     delete process.env["SCRUM_MODEL_PRICES"];
     const { project, sprint } = scrum.initProject("cost-no-price");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
     const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    scrum.logSession(issue.id, "did stuff", 1000);
+    await scrum.logSession(issue.id, "did stuff", 1000);
     const report = scrum.getCostReport(project.id);
     expect(report.totalTokens).toBe(1000);
     expect(report.totalCost).toBeUndefined();
     expect(report.issues[0]!.estimatedCost).toBeUndefined();
   });
 
-  it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", () => {
+  it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", async () => {
     process.env["SCRUM_MODEL_PRICES"] = JSON.stringify({ "claude-sonnet-4-6": 3.0 });
-    const { project, sprint } = scrum.initProject("cost-with-price");
+    try {
+      const { project, sprint } = scrum.initProject("cost-with-price");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      await scrum.logSession(issue.id, "did stuff", 1_000_000);
+      const report = scrum.getCostReport(project.id);
+      expect(report.totalTokens).toBe(1_000_000);
+      expect(report.totalCost).toBeCloseTo(3.0);
+    } finally {
+      delete process.env["SCRUM_MODEL_PRICES"];
+    }
+  });
+
+  it("getCostReport uses session.cost_usd when present", async () => {
+    delete process.env["SCRUM_MODEL_PRICES"];
+    const { project, sprint } = scrum.initProject("cost-usd-test");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
     const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    scrum.logSession(issue.id, "did stuff", 1_000_000);
+    // Log a session with some tokens (manual mode, no costUsd)
+    const session = await scrum.logSession(issue.id, "did stuff", 500);
+    // Inject a costUsd value directly via the DB to simulate transcript mode
+    const { eq: deq } = await import("drizzle-orm");
+    db.getDb()
+      .update(db.schema.sessions)
+      .set({ costUsd: 1.23 })
+      .where(deq(db.schema.sessions.id, session.id))
+      .run();
     const report = scrum.getCostReport(project.id);
-    expect(report.totalTokens).toBe(1_000_000);
-    expect(report.totalCost).toBeCloseTo(3.0);
-    delete process.env["SCRUM_MODEL_PRICES"];
+    expect(report.issues[0]!.estimatedCost).toBeCloseTo(1.23);
+    expect(report.totalCost).toBeCloseTo(1.23);
   });
 });
 
@@ -446,6 +486,98 @@ describe("claim locking", () => {
     scrum.assignIssue(i1.id, "builder");
     const pkg = scrum.getWorkPackage(project.id, 20, "builder");
     expect(pkg.issues.map((i) => i.id)).toContain(i1.id);
+  });
+});
+
+describe("cost windows", () => {
+  it("assignIssue with sessionId stores claimSessionId", () => {
+    const { project, sprint } = scrum.initProject("cw-session-id");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder", "sess-123");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.claimSessionId).toBe("sess-123");
+  });
+
+  it("releaseIssue sets releasedAt", () => {
+    const { project, sprint } = scrum.initProject("cw-release-at");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    scrum.releaseIssue(issue.id, "builder");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.releasedAt).toBeTruthy();
+    expect(typeof detail.releasedAt).toBe("string");
+  });
+
+  it("updateIssueStatus done sets releasedAt when not previously set", () => {
+    const { project, sprint } = scrum.initProject("cw-done-sets");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.updateIssueStatus(issue.id, "done");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.releasedAt).toBeTruthy();
+  });
+
+  it("updateIssueStatus done preserves releasedAt set by explicit release", () => {
+    const { project, sprint } = scrum.initProject("cw-done-coalesce");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    scrum.releaseIssue(issue.id, "builder");
+    const afterRelease = scrum.getIssueDetail(issue.id);
+    const t1 = afterRelease.releasedAt;
+    expect(t1).toBeTruthy();
+    scrum.updateIssueStatus(issue.id, "done");
+    const afterDone = scrum.getIssueDetail(issue.id);
+    expect(afterDone.releasedAt).toBe(t1);
+  });
+
+  it("updateIssueStatus blocked sets releasedAt", () => {
+    const { project, sprint } = scrum.initProject("cw-blocked-sets");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.updateIssueStatus(issue.id, "blocked", "waiting on external API");
+    const detail = scrum.getIssueDetail(issue.id);
+    expect(detail.releasedAt).toBeTruthy();
+  });
+
+  it("updateIssueStatus in_progress clears releasedAt on re-open", () => {
+    const { project, sprint } = scrum.initProject("cw-reopen-clears");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.updateIssueStatus(issue.id, "done");
+    const afterDone = scrum.getIssueDetail(issue.id);
+    expect(afterDone.releasedAt).toBeTruthy();
+    scrum.updateIssueStatus(issue.id, "in_progress");
+    const afterReopen = scrum.getIssueDetail(issue.id);
+    expect(afterReopen.releasedAt).toBeNull();
+  });
+
+  it("updateIssueStatus todo and review preserve releasedAt", () => {
+    const { project, sprint } = scrum.initProject("cw-preserve");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    scrum.assignIssue(issue.id, "builder");
+    scrum.releaseIssue(issue.id, "builder");
+    const afterRelease = scrum.getIssueDetail(issue.id);
+    const t1 = afterRelease.releasedAt;
+    expect(t1).toBeTruthy();
+
+    scrum.updateIssueStatus(issue.id, "todo");
+    const afterTodo = scrum.getIssueDetail(issue.id);
+    expect(afterTodo.releasedAt).toBe(t1);
+
+    scrum.updateIssueStatus(issue.id, "review");
+    const afterReview = scrum.getIssueDetail(issue.id);
+    expect(afterReview.releasedAt).toBe(t1);
   });
 });
 

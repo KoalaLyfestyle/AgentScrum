@@ -16,9 +16,55 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
+import { readdirSync, statSync } from "fs";
+import { homedir } from "os";
 
 import { getDb } from "../db/index.js";
 import * as scrum from "../services/scrum.js";
+
+// Session registry: cwd → CC session ID.
+// Populated by the agent calling scrum_register_session at PM phase start.
+// Required for COST_SOURCE=transcript — used to attribute tokens to issues.
+const sessionRegistry = new Map<string, string>();
+
+const COST_SOURCE_MODE = process.env["COST_SOURCE"] ?? "manual";
+
+const COST_TRACKING_SUFFIX =
+  "\n\nCOST TRACKING: Call this tool before starting work on an issue and after finishing, " +
+  "respectively, so that token usage is attributed to the correct issue. " +
+  "The cost window opens at assign (sets claimed_at) and closes at release or terminal status change (sets released_at). " +
+  `Current mode: COST_SOURCE=${COST_SOURCE_MODE}`;
+
+const ASSIGN_BASE_DESCRIPTION =
+  "Assign an issue to an agent and atomically claim it to prevent concurrent pickup by other agents. " +
+  "Returns an error (not a crash) if the issue is already claimed by a different agent and the claim is still fresh (<30 min). " +
+  "Use the agent's identifier (e.g. 'pm', 'builder', 'auditor').";
+
+const RELEASE_BASE_DESCRIPTION =
+  "Explicitly release an issue claim so other agents can pick it up. " +
+  "Call this when abandoning an issue or handing off work. " +
+  "Optionally pass agent_id to enforce that only the claiming agent can release.";
+
+/**
+ * Auto-discover the current Claude Code session ID from the transcript directory.
+ * CC writes JSONL transcripts to ~/.claude/projects/<cwd-with-slashes-as-hyphens>/.
+ * The most recently modified .jsonl file is the current session.
+ */
+export function discoverSessionId(cwd: string, projectsBaseDir?: string): string | undefined {
+  try {
+    const encoded = cwd.replace(/[/\\]/g, "-");
+    const base = projectsBaseDir ?? path.join(homedir(), ".claude", "projects");
+    const projectDir = path.join(base, encoded);
+    const files = readdirSync(projectDir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .map((f) => ({ name: f, mtime: statSync(path.join(projectDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    if (files.length === 0) return undefined;
+    return files[0]!.name.replace(/\.jsonl$/, "");
+  } catch {
+    return undefined;
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.resolve(__dirname, "../../drizzle");
@@ -29,11 +75,11 @@ migrate(getDb(), { migrationsFolder });
 const server = new McpServer({ name: "agentscrum", version: "0.1.0" });
 
 // Helper: wrap handler to catch errors and return them as isError responses
-function safe<T>(
-  fn: () => T
-): { content: [{ type: "text"; text: string }]; isError?: boolean } {
+async function safe<T>(
+  fn: () => T | Promise<T>
+): Promise<{ content: [{ type: "text"; text: string }]; isError?: boolean }> {
   try {
-    const result = fn();
+    const result = await fn();
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (err) {
     return {
@@ -232,21 +278,23 @@ server.registerTool(
 server.registerTool(
   "scrum_assign_issue",
   {
-    description:
-      "Assign an issue to an agent and atomically claim it to prevent concurrent pickup by other agents. Returns an error (not a crash) if the issue is already claimed by a different agent and the claim is still fresh (<30 min). Use the agent's identifier (e.g. 'pm', 'builder', 'auditor').",
+    description: ASSIGN_BASE_DESCRIPTION + (COST_SOURCE_MODE !== "off" ? COST_TRACKING_SUFFIX : ""),
     inputSchema: {
       issue_id: z.number().int().describe("Issue ID"),
       agent_id: z.string().describe("Agent identifier"),
     },
   },
-  (args) => safe(() => scrum.assignIssue(args.issue_id, args.agent_id))
+  (args) =>
+    safe(() => {
+      const sessionId = sessionRegistry.get(process.cwd()) ?? undefined;
+      return scrum.assignIssue(args.issue_id, args.agent_id, sessionId);
+    })
 );
 
 server.registerTool(
   "scrum_release_issue",
   {
-    description:
-      "Explicitly release an issue claim so other agents can pick it up. Call this when abandoning an issue or handing off work. Optionally pass agent_id to enforce that only the claiming agent can release.",
+    description: RELEASE_BASE_DESCRIPTION + (COST_SOURCE_MODE !== "off" ? COST_TRACKING_SUFFIX : ""),
     inputSchema: {
       issue_id: z.number().int().describe("Issue ID"),
       agent_id: z.string().optional().describe("Releasing agent's ID (optional — used to enforce ownership)"),
@@ -298,9 +346,9 @@ server.registerTool(
       model: z.string().optional().describe("Model used in this session (e.g. claude-sonnet-4-6)"),
     },
   },
-  (args) =>
-    safe(() => {
-      const session = scrum.logSession(
+  async (args) =>
+    safe(async () => {
+      const session = await scrum.logSession(
         args.issue_id,
         args.summary,
         args.tokens_used,
@@ -329,6 +377,32 @@ server.registerTool(
     },
   },
   (args) => safe(() => scrum.getWorkPackage(args.project_id, args.capacity, args.agent_id))
+);
+
+server.registerTool(
+  "scrum_register_session",
+  {
+    description:
+      "Register the Claude Code session ID for cost attribution. Call once at the start of each PM phase. " +
+      "If session_id is omitted, the server auto-discovers it from the most recent JSONL transcript in " +
+      "~/.claude/projects/<cwd-with-slashes-as-hyphens>/. " +
+      "The session ID is used by COST_SOURCE=transcript to attribute token usage to issues via claim windows.",
+    inputSchema: {
+      session_id: z.string().min(1).optional().describe(
+        "Claude Code session ID (UUID). If omitted, auto-discovered from transcript directory."
+      ),
+    },
+  },
+  (args) =>
+    safe(() => {
+      const dir = process.cwd();
+      const sessionId = args.session_id ?? discoverSessionId(dir);
+      if (!sessionId) {
+        throw new Error("No session ID provided and none discoverable from transcript directory");
+      }
+      sessionRegistry.set(dir, sessionId);
+      return { registered: true, cwd: dir, session_id: sessionId };
+    })
 );
 
 // ---------------------------------------------------------------------------

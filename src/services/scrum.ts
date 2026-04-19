@@ -3,8 +3,9 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
-import { eq, and, isNull, or, lt, sql } from "drizzle-orm";
+import { eq, and, isNull, or, lt, sql, inArray } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
+import { getCostSource } from "../cost/index.js";
 import type {
   Project,
   Epic,
@@ -496,6 +497,18 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
   const firstModel = modelPrices ? Object.keys(modelPrices).sort()[0] : undefined;
   const ratePerMillion = firstModel !== undefined ? modelPrices![firstModel] : undefined;
 
+  // Fetch all sessions for this sprint in a single query to avoid N+1
+  const issueIds = allIssues.map((i) => i.id);
+  const allSessions: Session[] = issueIds.length > 0
+    ? (db.select().from(schema.sessions).where(inArray(schema.sessions.issueId, issueIds)).all() as Session[])
+    : [];
+  const sessionsByIssue = new Map<number, Session[]>();
+  for (const s of allSessions) {
+    const bucket = sessionsByIssue.get(s.issueId) ?? [];
+    bucket.push(s);
+    sessionsByIssue.set(s.issueId, bucket);
+  }
+
   const issues: CostReportIssue[] = allIssues.map((issue) => {
     const epicNum = epicNumberMap[issue.epicId] ?? issue.epicId;
     const key = issueKey(epicNum, issue.number);
@@ -506,9 +519,22 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
       tokensUsed: issue.tokensUsed,
     };
     if (issue.assignedTo) entry.assignedTo = issue.assignedTo;
-    if (ratePerMillion !== undefined) {
+
+    // Prefer authoritative cost_usd from transcript mode; fall back to price-list multiplication
+    const sessionRows = sessionsByIssue.get(issue.id) ?? [];
+    const hasCostUsd = sessionRows.some((s) => s.costUsd != null);
+    if (hasCostUsd) {
+      const nullCostSessions = sessionRows.filter((s) => s.costUsd == null && s.tokensUsed > 0);
+      if (nullCostSessions.length > 0) {
+        process.stderr.write(
+          `[agentscrum/cost] warning: issue ${issue.id} has mixed cost modes — ${nullCostSessions.length} manual session(s) not included in estimated cost\n`
+        );
+      }
+      entry.estimatedCost = sessionRows.reduce((sum, s) => sum + (s.costUsd ?? 0), 0);
+    } else if (ratePerMillion !== undefined) {
       entry.estimatedCost = (issue.tokensUsed * ratePerMillion) / 1_000_000;
     }
+
     return entry;
   });
 
@@ -519,7 +545,11 @@ export function getCostReport(projectId: number, sprintNumber?: number): CostRep
     issues,
     totalTokens,
   };
-  if (ratePerMillion !== undefined) {
+  // Total cost: sum issue estimatedCosts when available, else fall back to token × rate
+  const hasIssueCosts = issues.some((i) => i.estimatedCost !== undefined);
+  if (hasIssueCosts) {
+    report.totalCost = issues.reduce((sum, i) => sum + (i.estimatedCost ?? 0), 0);
+  } else if (ratePerMillion !== undefined) {
     report.totalCost = (totalTokens * ratePerMillion) / 1_000_000;
   }
   if (modelPrices) {
@@ -683,10 +713,17 @@ export function updateIssueStatus(issueId: number, status: IssueStatus, blockerR
     // Preserve first start time — only set if not already set
     patch["startedAt"] = sql`COALESCE(${schema.issues.startedAt}, ${t})`;
     patch["completedAt"] = null;
+    // re-open clears releasedAt; workflow contract requires fresh assignIssue call to set a new claimSessionId
+    patch["releasedAt"] = null;
   } else if (status === "done") {
     patch["completedAt"] = t;
-  } else if (status === "todo" || status === "review" || status === "blocked") {
-    // Reopened — clear completion timestamp
+    // Close the cost window if not already closed by explicit release
+    patch["releasedAt"] = sql`COALESCE(${schema.issues.releasedAt}, ${t})`;
+  } else if (status === "blocked") {
+    patch["completedAt"] = null;
+    patch["releasedAt"] = sql`COALESCE(${schema.issues.releasedAt}, ${t})`;
+  } else if (status === "todo" || status === "review") {
+    // Reopened — clear completion timestamp, but preserve releasedAt record
     patch["completedAt"] = null;
   }
   const issue = db
@@ -707,14 +744,14 @@ function isClaimStale(claimedAt: string | null | undefined): boolean {
   return ageMs > CLAIM_TTL_MINUTES * 60_000;
 }
 
-export function assignIssue(issueId: number, agentId: string): Issue {
+export function assignIssue(issueId: number, agentId: string, sessionId?: string): Issue {
   const db = getDb();
   // Single conditional UPDATE — atomic under concurrent callers.
   // Succeeds only when: unclaimed, self-claimed, or claim is stale (>30 min old).
   const staleCutoff = new Date(Date.now() - CLAIM_TTL_MINUTES * 60_000).toISOString();
   const updated = db
     .update(schema.issues)
-    .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now() })
+    .set({ assignedTo: agentId, claimedBy: agentId, claimedAt: now(), claimSessionId: sessionId ?? null })
     .where(
       and(
         eq(schema.issues.id, issueId),
@@ -744,7 +781,7 @@ export function releaseIssue(issueId: number, agentId?: string): Issue {
   // Conditional WHERE — if agentId supplied, only release if that agent holds the claim.
   const updated = db
     .update(schema.issues)
-    .set({ claimedBy: null, claimedAt: null })
+    .set({ claimedBy: null, claimedAt: null, releasedAt: now() })
     .where(
       and(
         eq(schema.issues.id, issueId),
@@ -829,14 +866,48 @@ export function completeAc(acId: number): AcceptanceCriterion {
 
 // --- Sessions ---
 
-export function logSession(
+export async function logSession(
   issueId: number,
   summary: string,
   tokensUsed: number = 0,
   auditor?: AuditorVerdict,
   model?: string
-): Session {
+): Promise<Session> {
   const db = getDb();
+  let finalTokens = tokensUsed;
+  let costUsd: number | null = null;
+
+  const costMode = process.env["COST_SOURCE"] ?? "manual";
+  if (costMode === "transcript") {
+    const issue = db.select().from(schema.issues).where(eq(schema.issues.id, issueId)).get() as Issue | undefined;
+    if (issue?.claimSessionId && issue.claimedAt) {
+      const source = await getCostSource();
+      // Use the most recent prior session createdAt as the window start (delta mode),
+      // or fall back to claimedAt if this is the first session for this claim.
+      const lastSession = db
+        .select({ createdAt: schema.sessions.createdAt })
+        .from(schema.sessions)
+        .where(eq(schema.sessions.issueId, issueId))
+        .orderBy(sql`${schema.sessions.createdAt} DESC`)
+        .limit(1)
+        .get();
+      // Clamp to current claim's claimedAt to exclude usage from any prior claim
+      const rawFrom = lastSession?.createdAt ?? issue.claimedAt;
+      const from = rawFrom > issue.claimedAt ? rawFrom : issue.claimedAt;
+      const to = issue.releasedAt ?? now();
+      const data = await source.collect(issueId, issue.claimSessionId, from, to);
+      finalTokens = data.tokensIn + data.tokensOut + data.cacheRead + data.cacheCreate;
+      costUsd = data.costUsd;
+    } else {
+      process.stderr.write(
+        `[agentscrum/cost] warning: COST_SOURCE=transcript but issue ${issueId} has no claimSessionId — falling back to manual tokens\n`
+      );
+    }
+  } else if (costMode === "off") {
+    // COST_SOURCE=off: finalTokens stays 0, costUsd stays null
+    finalTokens = 0;
+  }
+  // costMode==="manual": finalTokens stays as passed in, costUsd stays null
 
   return db.transaction((tx) => {
     const session = tx
@@ -845,9 +916,10 @@ export function logSession(
         issueId,
         createdAt: now(),
         summary,
-        tokensUsed,
+        tokensUsed: finalTokens,
         auditor: auditor ?? null,
         model: model ?? null,
+        costUsd: costUsd,
       })
       .returning()
       .get();
@@ -861,7 +933,7 @@ export function logSession(
       .get();
     if (issueRow) {
       tx.update(schema.issues)
-        .set({ tokensUsed: issueRow.tokensUsed + tokensUsed })
+        .set({ tokensUsed: issueRow.tokensUsed + finalTokens })
         .where(eq(schema.issues.id, issueId))
         .run();
     }
