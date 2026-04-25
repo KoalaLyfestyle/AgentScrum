@@ -12,7 +12,6 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -67,10 +66,9 @@ export function discoverSessionId(cwd: string, projectsBaseDir?: string): string
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
-// Run migrations on start so agents don't need to call scrum init first
-migrate(getDb(), { migrationsFolder });
+// Trigger DB initialization (migrations run inside getDb() on first call)
+getDb();
 
 const server = new McpServer({ name: "agentscrum", version: "0.1.0" });
 
