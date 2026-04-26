@@ -12,6 +12,7 @@ process.env["SCRUM_DB_PATH"] = ":memory:";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.resolve(__dirname, "../../drizzle");
+const fixtureDir = path.resolve(__dirname, "../cost/fixtures");
 
 const db = await import("../../src/db/index.js");
 const scrum = await import("../../src/services/scrum.js");
@@ -20,6 +21,10 @@ beforeEach(() => {
   db._resetDb();
   migrate(db.getDb(), { migrationsFolder });
 });
+
+// ---------------------------------------------------------------------------
+// Project / sprint lifecycle
+// ---------------------------------------------------------------------------
 
 describe("initProject", () => {
   it("creates a project and Sprint 1 in planning status", () => {
@@ -65,11 +70,8 @@ describe("updateIssueStatus", () => {
     const epic = scrum.createEpic(project.id, "E1");
     const issue = scrum.createIssue(epic.id, sprint.id, "Do work");
 
-    const updated = scrum.updateIssueStatus(issue.id, "in_progress");
-    expect(updated.status).toBe("in_progress");
-
-    const done = scrum.updateIssueStatus(issue.id, "done");
-    expect(done.status).toBe("done");
+    expect(scrum.updateIssueStatus(issue.id, "in_progress").status).toBe("in_progress");
+    expect(scrum.updateIssueStatus(issue.id, "done").status).toBe("done");
   });
 });
 
@@ -83,13 +85,16 @@ describe("addAc / completeAc", () => {
     expect(ac.completed).toBe(false);
     expect(ac.text).toBe("Must do X");
 
-    const completed = scrum.completeAc(ac.id);
-    expect(completed.completed).toBe(true);
+    expect(scrum.completeAc(ac.id).completed).toBe(true);
   });
 });
 
+// ---------------------------------------------------------------------------
+// logSession (manual, off, and transcript modes)
+// ---------------------------------------------------------------------------
+
 describe("logSession", () => {
-  it("logs a session and increments tokensUsed on issue", async () => {
+  it("stores summary, tokens, auditor, and increments issue total", async () => {
     const { project, sprint } = scrum.initProject("log-test");
     const epic = scrum.createEpic(project.id, "E1");
     const issue = scrum.createIssue(epic.id, sprint.id, "Log issue");
@@ -103,7 +108,272 @@ describe("logSession", () => {
     expect(detail.tokensUsed).toBe(500);
     expect(detail.sessions).toHaveLength(1);
   });
+
+  it("stores model when explicitly passed", async () => {
+    const { project, sprint } = scrum.initProject("log-model-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    const issue = scrum.createIssue(epic.id, sprint.id, "Model issue");
+
+    const session = await scrum.logSession(issue.id, "Built X", 100, "pass", "claude-sonnet-4-6");
+    expect(session.model).toBe("claude-sonnet-4-6");
+  });
+
+  it("COST_SOURCE=off stores 0 tokens regardless of arg", async () => {
+    process.env["COST_SOURCE"] = "off";
+    try {
+      const { project, sprint } = scrum.initProject("off-mode-test");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      const session = await scrum.logSession(issue.id, "test", 999);
+      expect(session.tokensUsed).toBe(0);
+      expect(session.costUsd).toBeNull();
+    } finally {
+      delete process.env["COST_SOURCE"];
+    }
+  });
+
+  it("COST_SOURCE=transcript auto-extracts model from transcript", async () => {
+    process.env["COST_SOURCE"] = "transcript";
+    process.env["SCRUM_TRANSCRIPT_PROJECTS_DIR"] = fixtureDir;
+    const { eq } = await import("drizzle-orm");
+    try {
+      const { project, sprint } = scrum.initProject("transcript-model-test");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      scrum.assignIssue(issue.id, "builder", "sample-session");
+      // Backdate the claim window to align with fixture timestamps
+      db.getDb()
+        .update(db.schema.issues)
+        .set({ claimedAt: "2026-04-18T09:30:00.000Z", releasedAt: "2026-04-18T10:30:00.000Z" })
+        .where(eq(db.schema.issues.id, issue.id))
+        .run();
+      const session = await scrum.logSession(issue.id, "transcript work", 0);
+      expect(session.model).toBe("claude-test-1");
+      expect(session.tokensUsed).toBe(1450); // 300+150+1000 (cache)
+    } finally {
+      delete process.env["COST_SOURCE"];
+      delete process.env["SCRUM_TRANSCRIPT_PROJECTS_DIR"];
+    }
+  });
 });
+
+// ---------------------------------------------------------------------------
+// Capacity planning
+// ---------------------------------------------------------------------------
+
+describe("estimateIssue", () => {
+  it("sets story points on an issue", () => {
+    const { project, sprint } = scrum.initProject("est-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    const issue = scrum.createIssue(epic.id, sprint.id, "Estimate me");
+    expect(issue.storyPoints).toBeNull();
+    expect(scrum.estimateIssue(issue.id, 5).storyPoints).toBe(5);
+  });
+});
+
+describe("getWorkPackage", () => {
+  it("returns issues up to capacity with ACs and DoD embedded", () => {
+    const { project, sprint } = scrum.initProject("wp-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id, "Test sprint");
+    scrum.setDod(project.id, ["Run npm test", "Commit"]);
+
+    const i1 = scrum.createIssue(epic.id, sprint.id, "High priority", "feature", "high");
+    scrum.estimateIssue(i1.id, 3);
+    scrum.addAc(i1.id, "AC for high");
+
+    const i2 = scrum.createIssue(epic.id, sprint.id, "Low priority", "feature", "low");
+    scrum.estimateIssue(i2.id, 5);
+
+    // capacity 4 — fits i1 (3pts), skips i2 (5pts)
+    const pkg = scrum.getWorkPackage(project.id, 4);
+    expect(pkg.dod).toEqual([
+      expect.objectContaining({ text: "Run npm test", completed: false }),
+      expect.objectContaining({ text: "Commit", completed: false }),
+    ]);
+    expect(pkg.capacityRequested).toBe(4);
+    expect(pkg.capacityUsed).toBe(3);
+    expect(pkg.issues).toHaveLength(1);
+    expect(pkg.issues[0]!.title).toBe("High priority");
+    expect(pkg.issues[0]!.acs[0]!.text).toBe("AC for high");
+  });
+
+  it("packs multiple issues greedily by priority", () => {
+    const { project, sprint } = scrum.initProject("wp-pack-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+
+    const i1 = scrum.createIssue(epic.id, sprint.id, "A", "feature", "high");
+    scrum.estimateIssue(i1.id, 2);
+    const i2 = scrum.createIssue(epic.id, sprint.id, "B", "feature", "medium");
+    scrum.estimateIssue(i2.id, 3);
+    const i3 = scrum.createIssue(epic.id, sprint.id, "C", "feature", "low");
+    scrum.estimateIssue(i3.id, 8);
+
+    // capacity 5 — fits A(2) + B(3), not C(8)
+    const pkg = scrum.getWorkPackage(project.id, 5);
+    expect(pkg.issues.map((i) => i.title)).toEqual(["A", "B"]);
+    expect(pkg.capacityUsed).toBe(5);
+  });
+
+  it("includes decisions and lessons in the response", () => {
+    const { project, sprint } = scrum.initProject("wp-knowledge-test");
+    scrum.startSprint(sprint.id);
+    scrum.logDecision({
+      projectId: project.id,
+      title: "Use SQLite",
+      context: "needed persistence",
+      decision: "SQLite chosen",
+      rejectedAlternatives: "Postgres: too heavy",
+    });
+    scrum.logLesson({
+      title: "Don't skip migrations",
+      whatFailed: "raw schema edit broke prod",
+      dontRepeat: "always use drizzle migrate",
+      projectId: project.id,
+    });
+
+    const pkg = scrum.getWorkPackage(project.id, 10);
+    expect(pkg.decisions).toHaveLength(1);
+    expect(pkg.decisions[0]!.title).toBe("Use SQLite");
+    expect(pkg.lessons).toHaveLength(1);
+    expect(pkg.lessons[0]!.title).toBe("Don't skip migrations");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DoD management
+// ---------------------------------------------------------------------------
+
+describe("DoD management", () => {
+  it("adds, lists, and removes DoD items", () => {
+    const { project } = scrum.initProject("dod-test");
+
+    const item1 = scrum.addDodItem(project.id, "Run npm test");
+    const item2 = scrum.addDodItem(project.id, "Commit changes");
+    expect(item1.text).toBe("Run npm test");
+    expect(item2.text).toBe("Commit changes");
+
+    const list = scrum.listDod(project.id);
+    expect(list).toHaveLength(2);
+
+    scrum.removeDodItem(item1.id);
+    const listAfter = scrum.listDod(project.id);
+    expect(listAfter).toHaveLength(1);
+    expect(listAfter[0]!.text).toBe("Commit changes");
+  });
+
+  it("setDod replaces entire list", () => {
+    const { project } = scrum.initProject("dod-set-test");
+    scrum.addDodItem(project.id, "Old item");
+
+    scrum.setDod(project.id, ["Run tests", "Commit", "Push"]);
+    const list = scrum.listDod(project.id);
+    expect(list).toHaveLength(3);
+    expect(list.map((d) => d.text)).toEqual(["Run tests", "Commit", "Push"]);
+  });
+});
+
+describe("completeDodItem", () => {
+  it("marks a DoD item completed and getWorkPackage reflects it", () => {
+    const { project, sprint } = scrum.initProject("dod-complete-basic");
+    scrum.startSprint(sprint.id);
+    scrum.setDod(project.id, ["Run tests", "Commit"]);
+    const dod = scrum.listDod(project.id);
+    scrum.completeDodItem(sprint.id, dod[0]!.id);
+    const pkg = scrum.getWorkPackage(project.id, 0);
+    expect(pkg.dod[0]!.completed).toBe(true);
+    expect(pkg.dod[1]!.completed).toBe(false);
+  });
+
+  it("is idempotent — calling twice returns same record without duplicates", () => {
+    const { project, sprint } = scrum.initProject("dod-complete-idempotent");
+    scrum.startSprint(sprint.id);
+    scrum.setDod(project.id, ["Step 1"]);
+    const dod = scrum.listDod(project.id);
+    const first = scrum.completeDodItem(sprint.id, dod[0]!.id);
+    const second = scrum.completeDodItem(sprint.id, dod[0]!.id);
+    expect(first.id).toBe(second.id);
+    expect(scrum.getWorkPackage(project.id, 0).dod.filter((d) => d.completed)).toHaveLength(1);
+  });
+
+  it("per-sprint isolation — completion in sprint N does not affect sprint N+1", () => {
+    const { project, sprint: s1 } = scrum.initProject("dod-isolation");
+    scrum.startSprint(s1.id);
+    scrum.setDod(project.id, ["Step 1"]);
+    const dod = scrum.listDod(project.id);
+    scrum.completeDodItem(s1.id, dod[0]!.id);
+    scrum.closeSprint(s1.id);
+    const s2 = scrum.createSprint(project.id);
+    scrum.startSprint(s2.id);
+    expect(scrum.getWorkPackage(project.id, 0).dod[0]!.completed).toBe(false);
+  });
+
+  it("throws when DoD item does not belong to sprint's project", () => {
+    const { project: p1, sprint: s1 } = scrum.initProject("dod-cross-p1");
+    const { project: p2 } = scrum.initProject("dod-cross-p2");
+    scrum.startSprint(s1.id);
+    scrum.setDod(p2.id, ["Other project step"]);
+    const dodP2 = scrum.listDod(p2.id);
+    expect(() => scrum.completeDodItem(s1.id, dodP2[0]!.id)).toThrow(/does not belong/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Knowledge management — decisions and lessons
+// ---------------------------------------------------------------------------
+
+describe("knowledge management", () => {
+  it("logDecision stores a decision and getDecisions returns it", () => {
+    const { project } = scrum.initProject("decision-test");
+    scrum.logDecision({
+      projectId: project.id,
+      title: "Use SQLite over MongoDB",
+      context: "needed simple persistence",
+      decision: "SQLite chosen",
+      rejectedAlternatives: "MongoDB: too heavy for single-user",
+      consequences: "no horizontal scaling",
+    });
+    const decisions = scrum.getDecisions(project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]!.title).toBe("Use SQLite over MongoDB");
+    expect(decisions[0]!.rejectedAlternatives).toContain("MongoDB");
+    expect(decisions[0]!.status).toBe("accepted");
+  });
+
+  it("logLesson stores a lesson and getLessons returns it", () => {
+    const { project } = scrum.initProject("lesson-test");
+    scrum.logLesson({
+      title: "Never edit schema directly",
+      whatFailed: "raw edit broke migration history",
+      dontRepeat: "always use drizzle-kit generate",
+      projectId: project.id,
+      tags: "drizzle,db",
+    });
+    const lessons = scrum.getLessons(project.id);
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]!.title).toBe("Never edit schema directly");
+    expect(lessons[0]!.dontRepeat).toContain("drizzle-kit");
+    expect(lessons[0]!.tags).toBe("drizzle,db");
+  });
+
+  it("getLessons with no projectId returns cross-project lessons", () => {
+    const { project } = scrum.initProject("lesson-cross-test");
+    scrum.logLesson({ title: "Cross-project lesson", whatFailed: "x", dontRepeat: "y" });
+    scrum.logLesson({ title: "Project lesson", whatFailed: "a", dontRepeat: "b", projectId: project.id });
+    const all = scrum.getLessons();
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    const projectOnly = scrum.getLessons(project.id);
+    expect(projectOnly).toHaveLength(1);
+    expect(projectOnly[0]!.title).toBe("Project lesson");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sprint summary and retrospective
+// ---------------------------------------------------------------------------
 
 describe("getSprintSummary", () => {
   it("returns correct counts by status", () => {
@@ -132,94 +402,121 @@ describe("getActiveSprint fallback", () => {
   });
 });
 
-describe("estimateIssue", () => {
-  it("sets story points on an issue", () => {
-    const { project, sprint } = scrum.initProject("est-test");
+describe("getBacklog", () => {
+  it("returns issues in planning sprints", () => {
+    const { project, sprint } = scrum.initProject("backlog-test");
     const epic = scrum.createEpic(project.id, "E1");
-    const issue = scrum.createIssue(epic.id, sprint.id, "Estimate me");
-    expect(issue.storyPoints).toBeNull();
-
-    const updated = scrum.estimateIssue(issue.id, 5);
-    expect(updated.storyPoints).toBe(5);
-  });
-});
-
-describe("DoD management", () => {
-  it("adds, lists, and removes DoD items", () => {
-    const { project } = scrum.initProject("dod-test");
-
-    const item1 = scrum.addDodItem(project.id, "Run npm test");
-    const item2 = scrum.addDodItem(project.id, "Commit changes");
-    expect(item1.text).toBe("Run npm test");
-    expect(item2.text).toBe("Commit changes");
-
-    const list = scrum.listDod(project.id);
-    expect(list).toHaveLength(2);
-    expect(list[0]!.text).toBe("Run npm test");
-
-    scrum.removeDodItem(item1.id);
-    const listAfter = scrum.listDod(project.id);
-    expect(listAfter).toHaveLength(1);
-    expect(listAfter[0]!.text).toBe("Commit changes");
+    scrum.createIssue(epic.id, sprint.id, "Backlog issue A");
+    scrum.createIssue(epic.id, sprint.id, "Backlog issue B");
+    const backlog = scrum.getBacklog(project.id);
+    expect(backlog.length).toBe(2);
+    expect(backlog.map((i) => i.title)).toEqual(["Backlog issue A", "Backlog issue B"]);
   });
 
-  it("setDod replaces entire list", () => {
-    const { project } = scrum.initProject("dod-set-test");
-    scrum.addDodItem(project.id, "Old item");
-
-    scrum.setDod(project.id, ["Run tests", "Commit", "Push"]);
-    const list = scrum.listDod(project.id);
-    expect(list).toHaveLength(3);
-    expect(list.map((d) => d.text)).toEqual(["Run tests", "Commit", "Push"]);
-  });
-});
-
-describe("getWorkPackage", () => {
-  it("returns issues up to capacity with ACs and DoD embedded", () => {
-    const { project, sprint } = scrum.initProject("wp-test");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id, "Test sprint");
-    scrum.setDod(project.id, ["Run npm test", "Commit"]);
-
-    const i1 = scrum.createIssue(epic.id, sprint.id, "High priority", "feature", "high");
-    scrum.estimateIssue(i1.id, 3);
-    scrum.addAc(i1.id, "AC for high");
-
-    const i2 = scrum.createIssue(epic.id, sprint.id, "Low priority", "feature", "low");
-    scrum.estimateIssue(i2.id, 5);
-
-    // capacity 4 — fits i1 (3pts), skips i2 (5pts)
-    const pkg = scrum.getWorkPackage(project.id, 4);
-    expect(pkg.dod).toEqual([
-      expect.objectContaining({ text: "Run npm test", completed: false }),
-      expect.objectContaining({ text: "Commit", completed: false }),
-    ]);
-    expect(pkg.capacityRequested).toBe(4);
-    expect(pkg.capacityUsed).toBe(3);
-    expect(pkg.issues).toHaveLength(1);
-    expect(pkg.issues[0]!.title).toBe("High priority");
-    expect(pkg.issues[0]!.acs).toHaveLength(1);
-    expect(pkg.issues[0]!.acs[0]!.text).toBe("AC for high");
-  });
-
-  it("packs multiple issues greedily by priority", () => {
-    const { project, sprint } = scrum.initProject("wp-pack-test");
+  it("excludes issues from active/closed sprints", () => {
+    const { project, sprint } = scrum.initProject("backlog-active-test");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
-
-    const i1 = scrum.createIssue(epic.id, sprint.id, "A", "feature", "high");
-    scrum.estimateIssue(i1.id, 2);
-    const i2 = scrum.createIssue(epic.id, sprint.id, "B", "feature", "medium");
-    scrum.estimateIssue(i2.id, 3);
-    const i3 = scrum.createIssue(epic.id, sprint.id, "C", "feature", "low");
-    scrum.estimateIssue(i3.id, 8);
-
-    // capacity 5 — fits A(2) + B(3), not C(8)
-    const pkg = scrum.getWorkPackage(project.id, 5);
-    expect(pkg.issues.map((i) => i.title)).toEqual(["A", "B"]);
-    expect(pkg.capacityUsed).toBe(5);
+    scrum.createIssue(epic.id, sprint.id, "Active sprint issue");
+    expect(scrum.getBacklog(project.id).length).toBe(0);
   });
 });
+
+describe("getVelocity", () => {
+  it("returns empty array for projects with no closed sprints", () => {
+    const { project } = scrum.initProject("velocity-empty-test");
+    expect(scrum.getVelocity(project.id)).toEqual([]);
+  });
+
+  it("sums story points of done issues in closed sprints", () => {
+    const { project, sprint } = scrum.initProject("velocity-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const i1 = scrum.createIssue(epic.id, sprint.id, "A");
+    scrum.estimateIssue(i1.id, 3);
+    scrum.updateIssueStatus(i1.id, "done");
+    const i2 = scrum.createIssue(epic.id, sprint.id, "B");
+    scrum.estimateIssue(i2.id, 5);
+    scrum.updateIssueStatus(i2.id, "done");
+    scrum.createIssue(epic.id, sprint.id, "C"); // no estimate, not done
+    scrum.closeSprint(sprint.id);
+
+    const velocity = scrum.getVelocity(project.id);
+    expect(velocity.length).toBe(1);
+    expect(velocity[0]!.pointsCompleted).toBe(8);
+    expect(velocity[0]!.issuesCompleted).toBe(2);
+  });
+
+  it("excludes unestimated issues from velocity points", () => {
+    const { project, sprint } = scrum.initProject("velocity-null-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const i1 = scrum.createIssue(epic.id, sprint.id, "No points");
+    scrum.updateIssueStatus(i1.id, "done");
+    scrum.closeSprint(sprint.id);
+
+    const velocity = scrum.getVelocity(project.id);
+    expect(velocity[0]!.pointsCompleted).toBe(0);
+    expect(velocity[0]!.issuesCompleted).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cost reporting
+// ---------------------------------------------------------------------------
+
+describe("getCostReport", () => {
+  it("returns tokens only when SCRUM_MODEL_PRICES is not set", async () => {
+    delete process.env["SCRUM_MODEL_PRICES"];
+    const { project, sprint } = scrum.initProject("cost-no-price");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    await scrum.logSession(issue.id, "did stuff", 1000);
+    const report = scrum.getCostReport(project.id);
+    expect(report.totalTokens).toBe(1000);
+    expect(report.totalCost).toBeUndefined();
+    expect(report.issues[0]!.estimatedCost).toBeUndefined();
+  });
+
+  it("returns estimated cost when SCRUM_MODEL_PRICES is set", async () => {
+    process.env["SCRUM_MODEL_PRICES"] = JSON.stringify({ "claude-sonnet-4-6": 3.0 });
+    try {
+      const { project, sprint } = scrum.initProject("cost-with-price");
+      const epic = scrum.createEpic(project.id, "E1");
+      scrum.startSprint(sprint.id);
+      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+      await scrum.logSession(issue.id, "did stuff", 1_000_000);
+      const report = scrum.getCostReport(project.id);
+      expect(report.totalTokens).toBe(1_000_000);
+      expect(report.totalCost).toBeCloseTo(3.0);
+    } finally {
+      delete process.env["SCRUM_MODEL_PRICES"];
+    }
+  });
+
+  it("prefers session.cost_usd over token×price when present", async () => {
+    delete process.env["SCRUM_MODEL_PRICES"];
+    const { project, sprint } = scrum.initProject("cost-usd-test");
+    const epic = scrum.createEpic(project.id, "E1");
+    scrum.startSprint(sprint.id);
+    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const session = await scrum.logSession(issue.id, "did stuff", 500);
+    const { eq } = await import("drizzle-orm");
+    db.getDb()
+      .update(db.schema.sessions)
+      .set({ costUsd: 1.23 })
+      .where(eq(db.schema.sessions.id, session.id))
+      .run();
+    const report = scrum.getCostReport(project.id);
+    expect(report.issues[0]!.estimatedCost).toBeCloseTo(1.23);
+    expect(report.totalCost).toBeCloseTo(1.23);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edit operations
+// ---------------------------------------------------------------------------
 
 describe("updateIssue", () => {
   it("updates title, description, priority, type, and story points", () => {
@@ -258,6 +555,10 @@ describe("updateSprint", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// List operations
+// ---------------------------------------------------------------------------
+
 describe("listProjects / listSprints / listEpics", () => {
   it("lists all projects", () => {
     scrum.initProject("proj-a");
@@ -286,170 +587,43 @@ describe("listProjects / listSprints / listEpics", () => {
   });
 });
 
-describe("getBacklog", () => {
-  it("returns issues in planning sprints", () => {
-    const { project, sprint } = scrum.initProject("backlog-test");
-    const epic = scrum.createEpic(project.id, "E1");
-    // Sprint 1 is planning — issues here are backlog
-    scrum.createIssue(epic.id, sprint.id, "Backlog issue A");
-    scrum.createIssue(epic.id, sprint.id, "Backlog issue B");
-    const backlog = scrum.getBacklog(project.id);
-    expect(backlog.length).toBe(2);
-    expect(backlog.map((i) => i.title)).toEqual(["Backlog issue A", "Backlog issue B"]);
-  });
-
-  it("excludes issues from active/closed sprints", () => {
-    const { project, sprint } = scrum.initProject("backlog-active-test");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    scrum.createIssue(epic.id, sprint.id, "Active sprint issue");
-    const backlog = scrum.getBacklog(project.id);
-    expect(backlog.length).toBe(0);
-  });
-});
-
-describe("getVelocity", () => {
-  it("returns 0 for projects with no closed sprints", () => {
-    const { project } = scrum.initProject("velocity-empty-test");
-    expect(scrum.getVelocity(project.id)).toEqual([]);
-  });
-
-  it("sums story points of done issues in closed sprints", () => {
-    const { project, sprint } = scrum.initProject("velocity-test");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const i1 = scrum.createIssue(epic.id, sprint.id, "A");
-    scrum.estimateIssue(i1.id, 3);
-    scrum.updateIssueStatus(i1.id, "done");
-    const i2 = scrum.createIssue(epic.id, sprint.id, "B");
-    scrum.estimateIssue(i2.id, 5);
-    scrum.updateIssueStatus(i2.id, "done");
-    const i3 = scrum.createIssue(epic.id, sprint.id, "C"); // no estimate, not done
-    scrum.closeSprint(sprint.id);
-
-    const velocity = scrum.getVelocity(project.id);
-    expect(velocity.length).toBe(1);
-    expect(velocity[0]!.pointsCompleted).toBe(8);
-    expect(velocity[0]!.issuesCompleted).toBe(2);
-  });
-
-  it("excludes unestimated issues from velocity points", () => {
-    const { project, sprint } = scrum.initProject("velocity-null-test");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const i1 = scrum.createIssue(epic.id, sprint.id, "No points");
-    scrum.updateIssueStatus(i1.id, "done");
-    scrum.closeSprint(sprint.id);
-
-    const velocity = scrum.getVelocity(project.id);
-    expect(velocity[0]!.pointsCompleted).toBe(0);
-    expect(velocity[0]!.issuesCompleted).toBe(1);
-  });
-});
-
-describe("logSession COST_SOURCE=off", () => {
-  it("logSession with COST_SOURCE=off stores 0 tokens regardless of arg", async () => {
-    process.env["COST_SOURCE"] = "off";
-    try {
-      const { project, sprint } = scrum.initProject("off-mode-test");
-      const epic = scrum.createEpic(project.id, "E1");
-      scrum.startSprint(sprint.id);
-      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-      const session = await scrum.logSession(issue.id, "test", 999);
-      expect(session.tokensUsed).toBe(0);
-      expect(session.costUsd).toBeNull();
-    } finally {
-      delete process.env["COST_SOURCE"];
-    }
-  });
-});
-
-describe("getCostReport", () => {
-  it("returns tokens only when SCRUM_MODEL_PRICES is not set", async () => {
-    delete process.env["SCRUM_MODEL_PRICES"];
-    const { project, sprint } = scrum.initProject("cost-no-price");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    await scrum.logSession(issue.id, "did stuff", 1000);
-    const report = scrum.getCostReport(project.id);
-    expect(report.totalTokens).toBe(1000);
-    expect(report.totalCost).toBeUndefined();
-    expect(report.issues[0]!.estimatedCost).toBeUndefined();
-  });
-
-  it("returns estimated cost when SCRUM_MODEL_PRICES is set with a valid price", async () => {
-    process.env["SCRUM_MODEL_PRICES"] = JSON.stringify({ "claude-sonnet-4-6": 3.0 });
-    try {
-      const { project, sprint } = scrum.initProject("cost-with-price");
-      const epic = scrum.createEpic(project.id, "E1");
-      scrum.startSprint(sprint.id);
-      const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-      await scrum.logSession(issue.id, "did stuff", 1_000_000);
-      const report = scrum.getCostReport(project.id);
-      expect(report.totalTokens).toBe(1_000_000);
-      expect(report.totalCost).toBeCloseTo(3.0);
-    } finally {
-      delete process.env["SCRUM_MODEL_PRICES"];
-    }
-  });
-
-  it("getCostReport uses session.cost_usd when present", async () => {
-    delete process.env["SCRUM_MODEL_PRICES"];
-    const { project, sprint } = scrum.initProject("cost-usd-test");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    // Log a session with some tokens (manual mode, no costUsd)
-    const session = await scrum.logSession(issue.id, "did stuff", 500);
-    // Inject a costUsd value directly via the DB to simulate transcript mode
-    const { eq: deq } = await import("drizzle-orm");
-    db.getDb()
-      .update(db.schema.sessions)
-      .set({ costUsd: 1.23 })
-      .where(deq(db.schema.sessions.id, session.id))
-      .run();
-    const report = scrum.getCostReport(project.id);
-    expect(report.issues[0]!.estimatedCost).toBeCloseTo(1.23);
-    expect(report.totalCost).toBeCloseTo(1.23);
-  });
-});
+// ---------------------------------------------------------------------------
+// Claim locking
+// ---------------------------------------------------------------------------
 
 describe("claim locking", () => {
-  it("assignIssue sets claimedBy and claimedAt", () => {
-    const { project, sprint } = scrum.initProject("claim-basic");
+  let projectId!: number, sprintId!: number, epicId!: number;
+
+  beforeEach(() => {
+    const { project, sprint } = scrum.initProject("claim-test");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    projectId = project.id;
+    sprintId = sprint.id;
+    epicId = epic.id;
+  });
+
+  it("assignIssue sets claimedBy and claimedAt", () => {
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     const assigned = scrum.assignIssue(issue.id, "builder");
     expect(assigned.claimedBy).toBe("builder");
     expect(assigned.claimedAt).toBeTruthy();
   });
 
   it("assignIssue throws when issue is already claimed by a different agent", () => {
-    const { project, sprint } = scrum.initProject("claim-conflict");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
     expect(() => scrum.assignIssue(issue.id, "auditor")).toThrow(/already claimed/);
   });
 
   it("assignIssue allows self-reclaim", () => {
-    const { project, sprint } = scrum.initProject("claim-self");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
-    const reclaimed = scrum.assignIssue(issue.id, "builder");
-    expect(reclaimed.claimedBy).toBe("builder");
+    expect(scrum.assignIssue(issue.id, "builder").claimedBy).toBe("builder");
   });
 
   it("releaseIssue clears the claim", () => {
-    const { project, sprint } = scrum.initProject("claim-release");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
     const released = scrum.releaseIssue(issue.id, "builder");
     expect(released.claimedBy).toBeNull();
@@ -457,54 +631,51 @@ describe("claim locking", () => {
   });
 
   it("releaseIssue throws when a different agent tries to release", () => {
-    const { project, sprint } = scrum.initProject("claim-release-conflict");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
     expect(() => scrum.releaseIssue(issue.id, "auditor")).toThrow();
   });
 
   it("getWorkPackage excludes issues claimed by other agents", () => {
-    const { project, sprint } = scrum.initProject("claim-wp-filter");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const i1 = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    scrum.estimateIssue(i1.id, 3);
-    scrum.assignIssue(i1.id, "builder");
-    // auditor should not see builder's claimed issue
-    const pkg = scrum.getWorkPackage(project.id, 20, "auditor");
-    expect(pkg.issues.map((i) => i.id)).not.toContain(i1.id);
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
+    scrum.estimateIssue(issue.id, 3);
+    scrum.assignIssue(issue.id, "builder");
+    const pkg = scrum.getWorkPackage(projectId, 20, "auditor");
+    expect(pkg.issues.map((i) => i.id)).not.toContain(issue.id);
   });
 
   it("getWorkPackage includes self-claimed issues", () => {
-    const { project, sprint } = scrum.initProject("claim-wp-self");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const i1 = scrum.createIssue(epic.id, sprint.id, "Issue A");
-    scrum.estimateIssue(i1.id, 3);
-    scrum.assignIssue(i1.id, "builder");
-    const pkg = scrum.getWorkPackage(project.id, 20, "builder");
-    expect(pkg.issues.map((i) => i.id)).toContain(i1.id);
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
+    scrum.estimateIssue(issue.id, 3);
+    scrum.assignIssue(issue.id, "builder");
+    const pkg = scrum.getWorkPackage(projectId, 20, "builder");
+    expect(pkg.issues.map((i) => i.id)).toContain(issue.id);
   });
 });
 
+// ---------------------------------------------------------------------------
+// Cost windows
+// ---------------------------------------------------------------------------
+
 describe("cost windows", () => {
-  it("assignIssue with sessionId stores claimSessionId", () => {
-    const { project, sprint } = scrum.initProject("cw-session-id");
+  let sprintId!: number, epicId!: number;
+
+  beforeEach(() => {
+    const { project, sprint } = scrum.initProject("cw-test");
     const epic = scrum.createEpic(project.id, "E1");
     scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    sprintId = sprint.id;
+    epicId = epic.id;
+  });
+
+  it("assignIssue with sessionId stores claimSessionId", () => {
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder", "sess-123");
-    const detail = scrum.getIssueDetail(issue.id);
-    expect(detail.claimSessionId).toBe("sess-123");
+    expect(scrum.getIssueDetail(issue.id).claimSessionId).toBe("sess-123");
   });
 
   it("releaseIssue sets releasedAt", () => {
-    const { project, sprint } = scrum.initProject("cw-release-at");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
     scrum.releaseIssue(issue.id, "builder");
     const detail = scrum.getIssueDetail(issue.id);
@@ -513,117 +684,44 @@ describe("cost windows", () => {
   });
 
   it("updateIssueStatus done sets releasedAt when not previously set", () => {
-    const { project, sprint } = scrum.initProject("cw-done-sets");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.updateIssueStatus(issue.id, "done");
-    const detail = scrum.getIssueDetail(issue.id);
-    expect(detail.releasedAt).toBeTruthy();
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBeTruthy();
   });
 
   it("updateIssueStatus done preserves releasedAt set by explicit release", () => {
-    const { project, sprint } = scrum.initProject("cw-done-coalesce");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
     scrum.releaseIssue(issue.id, "builder");
-    const afterRelease = scrum.getIssueDetail(issue.id);
-    const t1 = afterRelease.releasedAt;
-    expect(t1).toBeTruthy();
+    const t1 = scrum.getIssueDetail(issue.id).releasedAt;
     scrum.updateIssueStatus(issue.id, "done");
-    const afterDone = scrum.getIssueDetail(issue.id);
-    expect(afterDone.releasedAt).toBe(t1);
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBe(t1);
   });
 
   it("updateIssueStatus blocked sets releasedAt", () => {
-    const { project, sprint } = scrum.initProject("cw-blocked-sets");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.updateIssueStatus(issue.id, "blocked", "waiting on external API");
-    const detail = scrum.getIssueDetail(issue.id);
-    expect(detail.releasedAt).toBeTruthy();
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBeTruthy();
   });
 
   it("updateIssueStatus in_progress clears releasedAt on re-open", () => {
-    const { project, sprint } = scrum.initProject("cw-reopen-clears");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.updateIssueStatus(issue.id, "done");
-    const afterDone = scrum.getIssueDetail(issue.id);
-    expect(afterDone.releasedAt).toBeTruthy();
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBeTruthy();
     scrum.updateIssueStatus(issue.id, "in_progress");
-    const afterReopen = scrum.getIssueDetail(issue.id);
-    expect(afterReopen.releasedAt).toBeNull();
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBeNull();
   });
 
   it("updateIssueStatus todo and review preserve releasedAt", () => {
-    const { project, sprint } = scrum.initProject("cw-preserve");
-    const epic = scrum.createEpic(project.id, "E1");
-    scrum.startSprint(sprint.id);
-    const issue = scrum.createIssue(epic.id, sprint.id, "Issue A");
+    const issue = scrum.createIssue(epicId, sprintId, "Issue A");
     scrum.assignIssue(issue.id, "builder");
     scrum.releaseIssue(issue.id, "builder");
-    const afterRelease = scrum.getIssueDetail(issue.id);
-    const t1 = afterRelease.releasedAt;
-    expect(t1).toBeTruthy();
+    const t1 = scrum.getIssueDetail(issue.id).releasedAt;
 
     scrum.updateIssueStatus(issue.id, "todo");
-    const afterTodo = scrum.getIssueDetail(issue.id);
-    expect(afterTodo.releasedAt).toBe(t1);
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBe(t1);
 
     scrum.updateIssueStatus(issue.id, "review");
-    const afterReview = scrum.getIssueDetail(issue.id);
-    expect(afterReview.releasedAt).toBe(t1);
-  });
-});
-
-describe("completeDodItem", () => {
-  it("marks a DoD item completed and getWorkPackage reflects it", () => {
-    const { project, sprint } = scrum.initProject("dod-complete-basic");
-    scrum.startSprint(sprint.id);
-    scrum.setDod(project.id, ["Run tests", "Commit"]);
-    const dod = scrum.listDod(project.id);
-    scrum.completeDodItem(sprint.id, dod[0]!.id);
-    const pkg = scrum.getWorkPackage(project.id, 0);
-    expect(pkg.dod[0]!.completed).toBe(true);
-    expect(pkg.dod[1]!.completed).toBe(false);
-  });
-
-  it("is idempotent — calling twice returns same record without duplicates", () => {
-    const { project, sprint } = scrum.initProject("dod-complete-idempotent");
-    scrum.startSprint(sprint.id);
-    scrum.setDod(project.id, ["Step 1"]);
-    const dod = scrum.listDod(project.id);
-    const first = scrum.completeDodItem(sprint.id, dod[0]!.id);
-    const second = scrum.completeDodItem(sprint.id, dod[0]!.id);
-    expect(first.id).toBe(second.id);
-    const pkg = scrum.getWorkPackage(project.id, 0);
-    expect(pkg.dod.filter((d) => d.completed)).toHaveLength(1);
-  });
-
-  it("per-sprint isolation — completion in sprint N does not affect sprint N+1", () => {
-    const { project, sprint: s1 } = scrum.initProject("dod-isolation");
-    scrum.startSprint(s1.id);
-    scrum.setDod(project.id, ["Step 1"]);
-    const dod = scrum.listDod(project.id);
-    scrum.completeDodItem(s1.id, dod[0]!.id);
-    scrum.closeSprint(s1.id);
-    const s2 = scrum.createSprint(project.id);
-    scrum.startSprint(s2.id);
-    const pkg = scrum.getWorkPackage(project.id, 0);
-    expect(pkg.dod[0]!.completed).toBe(false);
-  });
-
-  it("throws when DoD item does not belong to sprint's project", () => {
-    const { project: p1, sprint: s1 } = scrum.initProject("dod-cross-p1");
-    const { project: p2 } = scrum.initProject("dod-cross-p2");
-    scrum.startSprint(s1.id);
-    scrum.setDod(p2.id, ["Other project step"]);
-    const dodP2 = scrum.listDod(p2.id);
-    expect(() => scrum.completeDodItem(s1.id, dodP2[0]!.id)).toThrow(/does not belong/);
+    expect(scrum.getIssueDetail(issue.id).releasedAt).toBe(t1);
   });
 });

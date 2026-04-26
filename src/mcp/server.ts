@@ -12,7 +12,6 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -67,10 +66,9 @@ export function discoverSessionId(cwd: string, projectsBaseDir?: string): string
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
-// Run migrations on start so agents don't need to call scrum init first
-migrate(getDb(), { migrationsFolder });
+// Trigger DB initialization (migrations run inside getDb() on first call)
+getDb();
 
 const server = new McpServer({ name: "agentscrum", version: "0.1.0" });
 
@@ -334,7 +332,7 @@ server.registerTool(
   "scrum_log_session",
   {
     description:
-      "Append a session log entry to an issue. Call this at the end of every work session to record what was done, tokens used, and auditor verdict. Increments the issue's total tokens_used.",
+      "Append a session log entry to an issue. Call this at the end of every work session to record what was done, tokens used, and auditor verdict. Increments the issue's total tokens_used. Always pass model — required for dashboard model distribution (e.g. 'claude-sonnet-4-6').",
     inputSchema: {
       issue_id: z.number().int().describe("Issue ID"),
       summary: z.string().describe("What was done in this session"),
@@ -369,7 +367,7 @@ server.registerTool(
   "scrum_get_work_package",
   {
     description:
-      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. No follow-up reads needed. Also returns the project DoD checklist to complete after each issue. Conventions: epics are long-lived feature areas — reuse existing ones rather than creating new epics for each sprint. Issues should be completable in one session; split anything over 8pt. Adjust capacity honestly to match your context window — do not over-commit. When blocking an issue always supply a blocker_reason so retrospectives are useful.",
+      "Get a fully-briefed work package for this session. Pass your capacity in story points — e.g. 5 for a short session, 20 for a full context window. Returns todo issues sorted by priority up to capacity, each with title, description, ACs, and story points embedded. Also returns the project DoD checklist and all past decisions and lessons — read these before choosing an approach. No follow-up reads needed. Conventions: epics are long-lived feature areas — reuse existing ones rather than creating new epics for each sprint. Issues should be completable in one session; split anything over 8pt. Adjust capacity honestly to match your context window — do not over-commit. When blocking an issue always supply a blocker_reason so retrospectives are useful.",
     inputSchema: {
       project_id: z.number().int().describe("Project ID"),
       capacity: z.number().int().min(1).describe("Story points available this session"),

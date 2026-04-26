@@ -1,5 +1,8 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { fileURLToPath } from "url";
+import path from "path";
 import * as schema from "./schema.js";
 
 // SCRUM_DB_PATH must be an absolute path. Claude Code launches MCP servers
@@ -7,6 +10,9 @@ import * as schema from "./schema.js";
 // silently open (or create) the wrong database file.
 // The ./agentscrum.db fallback is safe only for local CLI runs where CWD IS the project root.
 const dbPath = process.env["SCRUM_DB_PATH"] ?? "./agentscrum.db";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
@@ -18,6 +24,7 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   sqlite.pragma("foreign_keys = ON");
 
   _db = drizzle(sqlite, { schema });
+  migrate(_db, { migrationsFolder });
   return _db;
 }
 

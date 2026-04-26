@@ -35,6 +35,7 @@
   "jest": {
     "preset": "ts-jest/presets/default-esm",
     "testEnvironment": "node",
+    "testPathIgnorePatterns": ["/node_modules/", "/.worktrees/"],
     "extensionsToTreatAsEsm": [
       ".ts"
     ],
@@ -45,7 +46,8 @@
       "^.+\\.tsx?$": [
         "ts-jest",
         {
-          "useESM": true
+          "useESM": true,
+          "diagnostics": { "exclude": ["/.worktrees/"] }
         }
       ]
     }
