@@ -46,6 +46,26 @@
 		['done', 'Done'],
 		['blocked', 'Blocked'],
 	] as const;
+
+	// Issues to highlight in the sprint card — prioritise active/review/blocked, then todo, then done
+	let sprintHighlightIssues = $derived(() => {
+		const order = { blocked: 0, in_progress: 1, review: 2, todo: 3, done: 4 };
+		return [...activeIssues]
+			.sort((a, b) => (order[a.status as keyof typeof order] ?? 5) - (order[b.status as keyof typeof order] ?? 5))
+			.slice(0, 4);
+	});
+
+	function statusColor(s: string) {
+		return s === 'blocked' ? 'var(--status-error)'
+			: s === 'done' ? 'var(--status-success)'
+			: s === 'in_progress' ? 'var(--accent-primary)'
+			: s === 'review' ? 'var(--status-warning)'
+			: 'var(--text-muted)';
+	}
+
+	function statusDot(s: string) {
+		return s === 'blocked' ? '⬡' : s === 'done' ? '✓' : s === 'in_progress' ? '◉' : s === 'review' ? '◈' : '○';
+	}
 </script>
 
 <div>
@@ -70,7 +90,7 @@
 	<!-- Active sprint + Epic progress -->
 	<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:var(--space-5);margin-bottom:var(--space-5);">
 		<div class="glass-standard">
-			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-3);">
 				<div>
 					<div class="label-upper" style="font-size:10px;margin-bottom:4px;">Active Sprint</div>
 					<h4 style="margin:0;">{activeSprint?.title ?? 'No active sprint'}</h4>
@@ -80,8 +100,22 @@
 				{/if}
 			</div>
 			{#if activeSprint}
-				<p style="font-size:var(--text-sm);margin-bottom:var(--space-4);font-style:italic;color:var(--text-muted);">{activeSprint.goal}</p>
-				<ProgressRing value={sprintPtsDone} max={sprintPts} size={72}
+				<!-- Sprint goal callout -->
+				{#if activeSprint.goal}
+					<div style="
+						border-left: 2px solid var(--accent-primary);
+						padding: var(--space-2) var(--space-3);
+						background: rgba(232,64,42,0.06);
+						border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+						margin-bottom: var(--space-4);
+					">
+						<div style="font-family:var(--font-display);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent-ember);margin-bottom:3px;">Sprint Goal</div>
+						<div style="font-family:var(--font-body);font-size:var(--text-sm);color:var(--text-secondary);line-height:1.4;">{activeSprint.goal}</div>
+					</div>
+				{/if}
+
+				<!-- Progress ring + status grid -->
+				<ProgressRing value={sprintPtsDone} max={sprintPts} size={68}
 					label="{sprintPts} story points"
 					sub="{sprintPtsDone} done · {sprintPts - sprintPtsDone} remaining"/>
 				<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:var(--space-2);margin-top:var(--space-4);">
@@ -93,6 +127,37 @@
 						</div>
 					{/each}
 				</div>
+
+				<!-- Issue mini-list -->
+				{#if sprintHighlightIssues().length > 0}
+					<div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border-subtle);">
+						<div style="font-family:var(--font-display);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--space-3);">Issues</div>
+						<div style="display:flex;flex-direction:column;gap:var(--space-2);">
+							{#each sprintHighlightIssues() as issue}
+								{@const epic = data.epics.find((e: any) => e.id === issue.epicId)}
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);background:rgba(255,140,80,0.04);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);cursor:pointer;transition:background 0.15s ease;"
+									onclick={() => onIssueSelect(issue)}
+									onmouseenter={(e) => (e.currentTarget as HTMLElement).style.background='rgba(255,140,80,0.08)'}
+									onmouseleave={(e) => (e.currentTarget as HTMLElement).style.background='rgba(255,140,80,0.04)'}
+									role="button"
+									tabindex="0"
+									onkeydown={(e) => e.key === 'Enter' && onIssueSelect(issue)}
+								>
+									<span style="font-size:12px;color:{statusColor(issue.status)};flex-shrink:0;">{statusDot(issue.status)}</span>
+									{#if epic}
+										<span style="font-family:var(--font-mono);font-size:9px;color:var(--accent-ember);flex-shrink:0;">E{String(epic.number).padStart(2,'0')}-I{String(issue.number).padStart(2,'0')}</span>
+									{/if}
+									<span style="font-family:var(--font-body);font-size:var(--text-xs);color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{issue.title}</span>
+									{#if issue.storyPoints}
+										<span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);flex-shrink:0;">{issue.storyPoints}pt</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			{/if}
 		</div>
 

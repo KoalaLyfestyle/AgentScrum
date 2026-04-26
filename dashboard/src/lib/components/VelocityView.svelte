@@ -75,7 +75,7 @@
 		{#if chartMode === 'sprint'}
 			<GroupedBarChart data={data.velocity.map((v: any) => ({ label: `S${v.sprintNumber}`, issues: v.issuesCompleted, points: v.pointsCompleted }))} height={200}/>
 		{:else}
-			<BarChart data={calData()} valueKey="value" labelKey="label" color="var(--data-1)" height={180} slantLabels/>
+			<BarChart data={calData()} valueKey="value" labelKey="label" color="var(--data-1)" height={180} slantLabels showArea/>
 			<div style="display:flex;gap:var(--space-6);margin-top:var(--space-3);justify-content:center;">
 				<span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-muted);">Empty months = no sprint closed</span>
 			</div>
