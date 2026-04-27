@@ -1,6 +1,6 @@
 {
   "name": "agentscrum",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scrum management for agent swarms — MCP-native sprint state",
   "type": "module",
   "bin": {
@@ -35,7 +35,10 @@
   "jest": {
     "preset": "ts-jest/presets/default-esm",
     "testEnvironment": "node",
-    "testPathIgnorePatterns": ["/node_modules/", "/.worktrees/"],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.worktrees/"
+    ],
     "extensionsToTreatAsEsm": [
       ".ts"
     ],
@@ -47,7 +50,11 @@
         "ts-jest",
         {
           "useESM": true,
-          "diagnostics": { "exclude": ["/.worktrees/"] }
+          "diagnostics": {
+            "exclude": [
+              "/.worktrees/"
+            ]
+          }
         }
       ]
     }
