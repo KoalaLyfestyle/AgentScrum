@@ -1008,7 +1008,7 @@ export function getWorkPackage(projectId: number, capacity: number, agentId?: st
   const allDecisions = getDecisions(projectId);
   const allLessons = getLessons(projectId);
   const LESSON_CAP = 10;
-  const lessons = allLessons.length > LESSON_CAP ? allLessons.slice(-5) : allLessons;
+  const lessons = allLessons.length > LESSON_CAP ? allLessons.slice(-LESSON_CAP) : allLessons;
 
   return {
     sprint,
