@@ -187,4 +187,6 @@ export interface WorkPackage {
   capacityRequested: number;
   capacityUsed: number;
   issues: IssueDetail[];
+  decisions: Decision[];
+  lessons: Lesson[];
 }

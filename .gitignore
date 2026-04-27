@@ -26,5 +26,8 @@ build/
 *.db-shm
 *.db-wal
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store

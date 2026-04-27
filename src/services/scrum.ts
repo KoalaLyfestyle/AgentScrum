@@ -898,6 +898,7 @@ export async function logSession(
       const data = await source.collect(issueId, issue.claimSessionId, from, to);
       finalTokens = data.tokensIn + data.tokensOut + data.cacheRead + data.cacheCreate;
       costUsd = data.costUsd;
+      if (!model && data.model) model = data.model;
     } else {
       process.stderr.write(
         `[agentscrum/cost] warning: COST_SOURCE=transcript but issue ${issueId} has no claimSessionId — falling back to manual tokens\n`
@@ -1004,12 +1005,19 @@ export function getWorkPackage(projectId: number, capacity: number, agentId?: st
     .all() as DodCompletion[];
   const completedItemIds = new Set(completions.map((c) => c.dodItemId));
 
+  const allDecisions = getDecisions(projectId);
+  const allLessons = getLessons(projectId);
+  const LESSON_CAP = 10;
+  const lessons = allLessons.length > LESSON_CAP ? allLessons.slice(-LESSON_CAP) : allLessons;
+
   return {
     sprint,
     dod: dod.map((d): WorkPackageDodItem => ({ id: d.id, text: d.text, completed: completedItemIds.has(d.id) })),
     capacityRequested: capacity,
     capacityUsed,
     issues: selected,
+    decisions: allDecisions,
+    lessons,
   };
 }
 

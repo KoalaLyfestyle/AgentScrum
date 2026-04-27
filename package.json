@@ -1,6 +1,6 @@
 {
   "name": "agentscrum",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scrum management for agent swarms — MCP-native sprint state",
   "type": "module",
   "bin": {
@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "mcp": "tsx src/mcp/server.ts",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "dev:dashboard": "cd dashboard && npm run dev"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -34,6 +35,10 @@
   "jest": {
     "preset": "ts-jest/presets/default-esm",
     "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.worktrees/"
+    ],
     "extensionsToTreatAsEsm": [
       ".ts"
     ],
@@ -44,7 +49,12 @@
       "^.+\\.tsx?$": [
         "ts-jest",
         {
-          "useESM": true
+          "useESM": true,
+          "diagnostics": {
+            "exclude": [
+              "/.worktrees/"
+            ]
+          }
         }
       ]
     }

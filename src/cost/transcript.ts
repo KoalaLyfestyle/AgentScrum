@@ -29,7 +29,9 @@ export class TranscriptCostSource implements CostSource {
 
   constructor(options: TranscriptOptions = {}) {
     this.projectsDir =
-      options.projectsDir ?? path.join(os.homedir(), ".claude", "projects");
+      options.projectsDir ??
+      process.env["SCRUM_TRANSCRIPT_PROJECTS_DIR"] ??
+      path.join(os.homedir(), ".claude", "projects");
   }
 
   async collect(

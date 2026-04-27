@@ -19,7 +19,7 @@ npm run db:migrate
 npm link
 
 # 4. Verify
-scrum --version          # 0.1.0
+scrum --version          # 0.2.0
 scrum --help             # full command reference
 ```
 
@@ -280,6 +280,35 @@ npx tsx scripts/export-sprint.ts --sprint <N> [--project <id>]
 # Writes: projects/<name>/sprints/sprint-N.md, decisions/, lessons/
 ```
 
+## Dashboard
+
+A read-only SvelteKit web dashboard that reads directly from the AgentScrum SQLite DB.
+
+**Views:** Overview · Live · Sprint Board · All Sprints · Epics · Issues · Velocity · Token Usage · Decisions · Lessons
+
+```bash
+# Run the dashboard dev server (port 5173)
+npm run dev:dashboard
+
+# Or from dashboard/ directly
+cd dashboard && npm run dev
+```
+
+**Environment variables for the dashboard:**
+
+```bash
+AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agentscrum.db)
+```
+
+**URL params:**
+
+| Param | Values | Description |
+|-------|--------|-------------|
+| `?project=<id>` | integer | Select project (default: first project in DB) |
+| `?nav=topbar` | topbar (default) | Show full top nav (standalone mode) |
+| `?nav=none` | none | Hide nav entirely (embed mode for Orion main dashboard) |
+| `?view=<name>` | overview, live, sprint, sprints, epics, issues, velocity, tokens, decisions, lessons | Active view |
+
 ## Environment Variables
 
 ```bash
@@ -306,6 +335,7 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 | Database        | SQLite via Drizzle ORM         |
 | Agent interface | MCP server (stdio, 27 tools)   |
 | CLI             | Commander.js (`scrum` command) |
+| Dashboard       | SvelteKit + Vite               |
 
 ## Status
 
@@ -317,17 +347,11 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 | 4      | CLI polish, multi-project, edit operations                                    | ✓ Done |
 | 5      | Claim locking, token velocity, cost reporting                                 | ✓ Done |
 | 6      | Session model tracking, issue lifecycle timestamps, DoD per-sprint completion | ✓ Done |
+| 7      | SvelteKit dashboard: overview, sprint board, velocity, tokens, epics, decisions, lessons | ✓ Done |
 
 ## Roadmap (Open Issues)
 
 ### Near-term
 
-- Blocked issue reason field — structured blocker description on `blocked` status transition
-- `scrum_get_retrospective` — queries blocked issues, failed ACs, high-token issues for sprint summary
-- Token velocity per sprint/agent/model + cost reporting (`scrum_get_velocity`, `scrum_get_cost_report`, `scrum cost`)
-
-### Medium-term
-
 - Multi-agent conflict detection — prevent two agents claiming the same issue simultaneously
-- Cost reporting — tokens × model price = sprint $ spend
-- SvelteKit sprint board dashboard
+- Dashboard build + static export for embedding in other tools
