@@ -5,13 +5,12 @@ import { fileURLToPath } from "url";
 import path from "path";
 import * as schema from "./schema.js";
 
-// SCRUM_DB_PATH must be an absolute path. Claude Code launches MCP servers
-// with CWD set to ~/Orion/, not the project root, so a relative path would
-// silently open (or create) the wrong database file.
-// The ./agentscrum.db fallback is safe only for local CLI runs where CWD IS the project root.
-const dbPath = process.env["SCRUM_DB_PATH"] ?? "./agentscrum.db";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Fallback resolves relative to this file (src/db/ → project root) so the DB
+// lands in the right place even when SCRUM_DB_PATH is unset and CWD varies.
+export const dbPath =
+  process.env["SCRUM_DB_PATH"] ??
+  path.resolve(__dirname, "../../agentscrum.db");
 const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;

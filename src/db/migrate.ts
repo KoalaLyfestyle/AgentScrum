@@ -4,8 +4,8 @@ import Database from "better-sqlite3";
 import { fileURLToPath } from "url";
 import path from "path";
 
-const dbPath = process.env["SCRUM_DB_PATH"] ?? "./agentscrum.db";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../../agentscrum.db");
 const migrationsFolder = path.resolve(__dirname, "../../drizzle");
 
 const sqlite = new Database(dbPath);

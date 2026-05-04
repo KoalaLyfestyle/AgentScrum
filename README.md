@@ -312,7 +312,7 @@ AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agent
 ## Environment Variables
 
 ```bash
-SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: ./agentscrum.db)
+SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: <project-root>/agentscrum.db)
 OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
 SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost reporting
@@ -321,7 +321,7 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 
 | Variable              | Default            | Description                                                                                                                                                                                                               |
 | --------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SCRUM_DB_PATH`       | `./agentscrum.db`  | SQLite path — use absolute path so CLI works from any directory                                                                                                                                                           |
+| `SCRUM_DB_PATH`       | `<project-root>/agentscrum.db` | SQLite path — defaults to the package root; set to override                                                                                                                                                           |
 | `SCRUM_PROJECT_ID`    | —                  | Used by MCP server and scripts; CLI takes project name as first argument                                                                                                                                                  |
 | `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts`                                                                                                                                                                                         |
 | `SCRUM_MODEL_PRICES`  | —                  | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
