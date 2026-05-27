@@ -23,20 +23,20 @@ scrum --version          # 0.2.0
 scrum --help             # full command reference
 ```
 
-> **No build step required.** The `scrum` command runs TypeScript directly via `tsx`.
-> If you don't want to use `npm link`, every command also works as `npx tsx src/cli/index.ts <args>`.
+> The `scrum` CLI runs TypeScript directly via `tsx` — no build needed for CLI use.
+> The **MCP server** requires a build step (`npm run build`) and runs from `dist/` for stability.
+> Without `npm link`, the CLI also works as `npx tsx src/cli/index.ts <args>`.
 
 ```bash
 # 5. Create your first project (interactive DoD prompt)
 scrum init myproject
 
-# 6. Register the MCP server with Claude Code
-claude mcp add agentscrum \
-  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
-  -- /absolute/path/to/node_modules/.bin/tsx /absolute/path/to/src/mcp/server.ts
+# 6. Build and register the MCP server with Claude Code
+npm run build
+claude mcp add agentscrum node /absolute/path/to/dist/mcp/server.js
 ```
 
-> `tsx` is a dev dependency — it's available at `node_modules/.bin/tsx` after `npm install`. No separate global install needed. Use the **absolute path** to the binary since Claude Code may not inherit your shell's `PATH`.
+> Run `npm run build` after any changes to server source before restarting Claude Code. Using the compiled JS (not `tsx`) keeps startup fast and stable — `tsx` loads the full TypeScript compiler on every start, which causes the server to go down under memory pressure.
 
 Once registered, all 27 MCP tools are available in every Claude Code session.
 

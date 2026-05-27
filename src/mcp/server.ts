@@ -12,6 +12,13 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`[agentscrum-mcp] uncaughtException: ${err.stack ?? err}\n`);
+});
+process.on("unhandledRejection", (reason) => {
+  process.stderr.write(`[agentscrum-mcp] unhandledRejection: ${reason}\n`);
+});
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
