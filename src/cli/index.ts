@@ -12,6 +12,7 @@ import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
 import { registerCost } from "./commands/cost.js";
 import { findProject, findProjectByDirectory } from "../services/scrum.js";
+import { warnIfUnsupportedNode } from "../db/open.js";
 
 // ---------------------------------------------------------------------------
 // Project resolution
@@ -78,7 +79,8 @@ program
       "  scrum myproject dod list            # show Definition of Done",
       "",
       "Environment variables (set in .env or shell):",
-      "  SCRUM_DB_PATH      absolute path to SQLite file (default: ./agentscrum.db)",
+      "  SCRUM_DB_PATH      SQLite file; relative paths resolve from the AgentScrum checkout",
+      "                     (default: <checkout>/agentscrum.db; AGENTSCRUM_DB_PATH is an alias)",
       "  SCRUM_PROJECT_ID   fallback project ID if no project name is passed",
     ].join("\n")
   )
@@ -102,4 +104,5 @@ if (process.argv.length === 2) {
   program.help();
 }
 
+warnIfUnsupportedNode();
 program.parse(process.argv);

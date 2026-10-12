@@ -17,7 +17,8 @@
  * Run manually at sprint close. No automation, no tokens.
  */
 
-import Database from "better-sqlite3";
+import { resolveDbPath } from "../src/db/path.js";
+import { openSqlite } from "../src/db/open.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -40,13 +41,13 @@ if (!sprintArg) {
 const sprintNumber = parseInt(sprintArg, 10);
 const projectId = projectArg ? parseInt(projectArg, 10) : 1;
 
-const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../agentscrum.db");
+const dbPath = resolveDbPath();
 const vaultRoot = process.env["OBSIDIAN_VAULT_PATH"] ?? path.join(os.homedir(), "obsidian-vault");
 
 // ---------------------------------------------------------------------------
 // DB
 // ---------------------------------------------------------------------------
-const db = new Database(dbPath, { readonly: true });
+const db = openSqlite(dbPath, { readonly: true, fileMustExist: true });
 
 // ---------------------------------------------------------------------------
 // Helpers

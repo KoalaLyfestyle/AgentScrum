@@ -3,6 +3,10 @@
   "version": "0.2.0",
   "description": "Scrum management for agent swarms — MCP-native sprint state",
   "type": "module",
+  "engines": {
+    "node": ">=24.21.0 <25"
+  },
+  "packageManager": "npm@10.9.4",
   "bin": {
     "scrum": "./bin/scrum.cjs"
   },
@@ -13,7 +17,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "mcp": "tsx src/mcp/server.ts",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "dev:dashboard": "cd dashboard && npm run dev"
+    "dev:dashboard": "cd dashboard && npm run dev",
+    "doctor": "node scripts/doctor.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -37,7 +42,8 @@
     "testEnvironment": "node",
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "/.worktrees/"
+      "/.worktrees/",
+      "/dashboard/"
     ],
     "extensionsToTreatAsEsm": [
       ".ts"

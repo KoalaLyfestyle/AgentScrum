@@ -6,7 +6,8 @@
  * a full sprint lifecycle without reading YAML or needing a human PM.
  *
  * Environment:
- *   SCRUM_DB_PATH     — SQLite file path (default: ./agentscrum.db)
+ *   SCRUM_DB_PATH     — SQLite file path (default: <checkout>/agentscrum.db;
+ *                       relative paths resolve from the checkout; alias: AGENTSCRUM_DB_PATH)
  *   SCRUM_PROJECT_ID  — default project ID for tools that omit project_id
  */
 
@@ -26,6 +27,7 @@ import { readdirSync, statSync } from "fs";
 import { homedir } from "os";
 
 import { getDb } from "../db/index.js";
+import { warnIfUnsupportedNode } from "../db/open.js";
 import * as scrum from "../services/scrum.js";
 
 // Session registry: cwd → CC session ID.
@@ -74,6 +76,7 @@ export function discoverSessionId(cwd: string, projectsBaseDir?: string): string
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+warnIfUnsupportedNode();
 // Trigger DB initialization (migrations run inside getDb() on first call)
 getDb();
 

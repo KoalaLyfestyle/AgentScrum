@@ -1,9 +1,7 @@
 import type { Config } from "drizzle-kit";
-import { fileURLToPath } from "url";
-import path from "path";
+import { resolveDbPath } from "./src/db/path.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "agentscrum.db");
+const dbPath = resolveDbPath();
 
 export default {
   schema: "./src/db/schema.ts",

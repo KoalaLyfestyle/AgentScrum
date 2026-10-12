@@ -1,4 +1,24 @@
-// Sync AGENTSCRUM_DB_PATH → SCRUM_DB_PATH so the ScrumService singleton
-// picks up the dashboard's DB path on first use.
-const resolved = process.env['AGENTSCRUM_DB_PATH'] ?? '../agentscrum.db';
-process.env['SCRUM_DB_PATH'] = resolved;
+// Resolve the AgentScrum database once, at server start, with the same rules as
+// the CLI and MCP server (src/db/path.ts). Relative paths resolve from the
+// AgentScrum checkout, never from the dashboard's working directory.
+import { existsSync } from 'fs';
+import { resolveDbPath, CANONICAL_DB_ENV, ALIAS_DB_ENV } from '$scrum/db/path.js';
+
+// Checkout root, baked in by vite.config.ts. In dev this equals PROJECT_ROOT;
+// in a production build the bundled PROJECT_ROOT would point inside the build output.
+declare const __AGENTSCRUM_ROOT__: string;
+
+const dbPath = resolveDbPath(process.env, __AGENTSCRUM_ROOT__);
+
+if (dbPath !== ':memory:' && !existsSync(dbPath)) {
+	throw new Error(
+		`AgentScrum database not found at ${dbPath}.\n` +
+			`The dashboard is read-only and will not create an empty database.\n` +
+			`Fix: run "npm run db:migrate" (or "scrum init <name>") in the AgentScrum checkout, ` +
+			`or set ${CANONICAL_DB_ENV} to the database the CLI/MCP server uses.`
+	);
+}
+
+// Pin both names to the absolute path so every later reader agrees.
+process.env[CANONICAL_DB_ENV] = dbPath;
+process.env[ALIAS_DB_ENV] = dbPath;
