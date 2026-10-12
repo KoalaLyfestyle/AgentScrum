@@ -7,7 +7,7 @@
 		max,
 		sub,
 		variant = ''
-	}: { label: string; value: number; max: number; sub?: string; variant?: string } = $props();
+	}: { label?: string; value: number; max: number; sub?: string; variant?: string } = $props();
 
 	let pct = $derived(max > 0 ? Math.min(100, (value / max) * 100) : 0);
 	let fillCls = $derived(
