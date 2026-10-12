@@ -28,7 +28,7 @@ try {
 } catch (err) {
   ok = false;
   console.log(`better-sqlite3: FAIL`);
-  console.log(`  ${String(err && err.message).split('\n')[0]}`);
+  console.log(`  ${String(err && err.message).replace(/\s*\n\s*/g, ' ').trim()}`);
   console.log(`Fix: with this same node, run "npm rebuild better-sqlite3" in ${root}`);
 }
 process.exit(ok ? 0 : 1);

@@ -45,7 +45,7 @@ export function openSqlite(
     return new Database(dbPath, options);
   } catch (err) {
     if (!isNativeLoadError(err)) throw err;
-    const original = (err as Error).message.split("\n")[0];
+    const original = (err as Error).message.replace(/\s*\n\s*/g, " ").trim();
     const wrapped = new Error(
       `better-sqlite3 could not load in this Node runtime.\n` +
         runtimeSummary() +

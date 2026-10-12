@@ -77,8 +77,14 @@ export function discoverSessionId(cwd: string, projectsBaseDir?: string): string
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 warnIfUnsupportedNode();
-// Trigger DB initialization (migrations run inside getDb() on first call)
-getDb();
+// Trigger DB initialization (migrations run inside getDb() on first call).
+// Fail fast with a non-zero exit so the MCP client reports the startup error.
+try {
+  getDb();
+} catch (err) {
+  process.stderr.write(`[agentscrum-mcp] startup failed: ${err instanceof Error ? err.message : err}\n`);
+  process.exit(1);
+}
 
 const server = new McpServer({ name: "agentscrum", version: "0.1.0" });
 

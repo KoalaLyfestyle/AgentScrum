@@ -6,6 +6,8 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 
 ## Quick Start
 
+Requires Node 24 LTS (tested on 24.21.0, pinned in `.nvmrc`). `better-sqlite3` is a native addon, so install, build, and run with the same Node. `npm run doctor` prints the Node path, version, and architecture, and checks that the addon loads.
+
 ```bash
 # 1. Clone and install
 git clone https://github.com/KoalaLyfestyle/AgentScrum.git
@@ -104,7 +106,7 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (26)
+## MCP Tools (27)
 
 ### Read
 
@@ -294,11 +296,7 @@ npm run dev:dashboard
 cd dashboard && npm run dev
 ```
 
-**Environment variables for the dashboard:**
-
-```bash
-AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agentscrum.db)
-```
+The dashboard reads the same database as the CLI and MCP server, using the rules in [Database location](#database-location). It never creates a database: if the file is missing, it stops with a message that says how to create it. Install the root package (`npm ci` in the repo root) before the dashboard; the dashboard uses the root's `drizzle-orm`.
 
 **URL params:**
 
@@ -309,10 +307,19 @@ AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agent
 | `?nav=none` | none | Hide nav entirely (embed mode for Orion main dashboard) |
 | `?view=<name>` | overview, live, sprint, sprints, epics, issues, velocity, tokens, decisions, lessons | Active view |
 
+## Database location
+
+One setting decides where the SQLite file lives, for the CLI, MCP server, migrations, scripts, and dashboard (`src/db/path.ts`):
+
+- `SCRUM_DB_PATH` is the canonical setting. `AGENTSCRUM_DB_PATH` is accepted as an alias.
+- Unset: `<checkout>/agentscrum.db`.
+- Relative paths resolve from the AgentScrum checkout, not the working directory.
+- If both variables are set to different files, commands stop with an error instead of picking one.
+
 ## Environment Variables
 
 ```bash
-SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: <project-root>/agentscrum.db)
+SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: <checkout>/agentscrum.db; alias: AGENTSCRUM_DB_PATH)
 OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
 SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost reporting
@@ -321,11 +328,20 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 
 | Variable              | Default            | Description                                                                                                                                                                                                               |
 | --------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SCRUM_DB_PATH`       | `<project-root>/agentscrum.db` | SQLite path — defaults to the package root; set to override                                                                                                                                                           |
+| `SCRUM_DB_PATH`       | `<checkout>/agentscrum.db` | SQLite path. Relative values resolve from the checkout. `AGENTSCRUM_DB_PATH` is an alias; conflicting values are an error.                                                                                       |
 | `SCRUM_PROJECT_ID`    | —                  | Used by MCP server and scripts; CLI takes project name as first argument                                                                                                                                                  |
 | `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts`                                                                                                                                                                                         |
 | `SCRUM_MODEL_PRICES`  | —                  | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
 | `COST_SOURCE`         | `manual`           | Cost collection mode. `off` — no token tracking. `manual` — agent passes `tokens_used` to `scrum_log_session`. `transcript` — auto-reads tokens from Claude Code JSONL transcripts; requires `scrum_register_session` at session start and `scrum_assign_issue`/`scrum_release_issue` around each issue. |
+
+## Development checks
+
+```bash
+npm ci && npm run build && npm test          # root: 68 tests in 4 suites
+cd dashboard && npm ci && npm run check && npm test   # dashboard: 12 tests
+```
+
+Counts are from the last run on Node 24.21.0.
 
 ## Stack
 
