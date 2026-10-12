@@ -2,13 +2,20 @@
 // the CLI and MCP server (src/db/path.ts). Relative paths resolve from the
 // AgentScrum checkout, never from the dashboard's working directory.
 import { existsSync } from 'fs';
-import { resolveDbPath, CANONICAL_DB_ENV, ALIAS_DB_ENV } from '$scrum/db/path.js';
+import {
+	resolveDbPath,
+	setProjectRoot,
+	CANONICAL_DB_ENV,
+	ALIAS_DB_ENV
+} from '$scrum/db/path.js';
 
 // Checkout root, baked in by vite.config.ts. In dev this equals PROJECT_ROOT;
-// in a production build the bundled PROJECT_ROOT would point inside the build output.
+// in a production build the bundled PROJECT_ROOT would point inside the build
+// output, so the default DB and the migrations folder would be wrong.
 declare const __AGENTSCRUM_ROOT__: string;
 
-const dbPath = resolveDbPath(process.env, __AGENTSCRUM_ROOT__);
+setProjectRoot(__AGENTSCRUM_ROOT__);
+const dbPath = resolveDbPath();
 
 if (dbPath !== ':memory:' && !existsSync(dbPath)) {
 	throw new Error(

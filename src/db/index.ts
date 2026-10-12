@@ -2,10 +2,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import path from "path";
 import * as schema from "./schema.js";
-import { PROJECT_ROOT, resolveDbPath } from "./path.js";
+import { getProjectRoot, resolveDbPath } from "./path.js";
 import { openSqlite } from "./open.js";
-
-const migrationsFolder = path.resolve(PROJECT_ROOT, "drizzle");
 
 /**
  * Resolved database path. Read lazily so a host process (the dashboard) can set
@@ -25,7 +23,7 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   sqlite.pragma("foreign_keys = ON");
 
   _db = drizzle(sqlite, { schema });
-  migrate(_db, { migrationsFolder });
+  migrate(_db, { migrationsFolder: path.resolve(getProjectRoot(), "drizzle") });
   return _db;
 }
 

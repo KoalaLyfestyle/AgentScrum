@@ -26,6 +26,21 @@ export const PROJECT_ROOT = path.resolve(
   "../.."
 );
 
+let projectRoot = PROJECT_ROOT;
+
+/** Checkout root used for the default DB, relative paths, and migrations. */
+export function getProjectRoot(): string {
+  return projectRoot;
+}
+
+/**
+ * Override the checkout root. Only for hosts that bundle this module (the
+ * dashboard's production build), where import.meta.url no longer points here.
+ */
+export function setProjectRoot(root: string): void {
+  projectRoot = path.resolve(root);
+}
+
 export class DbPathConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -42,7 +57,7 @@ function normalise(value: string, projectRoot: string): string {
 
 export function resolveDbPath(
   env: Env = process.env,
-  projectRoot: string = PROJECT_ROOT
+  projectRoot: string = getProjectRoot()
 ): string {
   const canonical = env[CANONICAL_DB_ENV]?.trim() || undefined;
   const alias = env[ALIAS_DB_ENV]?.trim() || undefined;
