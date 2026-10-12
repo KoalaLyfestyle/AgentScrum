@@ -43,7 +43,7 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/.worktrees/",
-      "/dashboard/"
+      "<rootDir>/dashboard/"
     ],
     "extensionsToTreatAsEsm": [
       ".ts"
