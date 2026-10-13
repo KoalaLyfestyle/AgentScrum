@@ -14,6 +14,16 @@ export function getDbPath(): string {
 }
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let migrateOnOpen = true;
+
+/**
+ * Whether getDb() applies pending migrations when it first opens the database.
+ * The dashboard turns this off so viewing a database never changes its schema.
+ * Call before the first getDb().
+ */
+export function setMigrateOnOpen(enabled: boolean): void {
+  migrateOnOpen = enabled;
+}
 
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
@@ -23,7 +33,9 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   sqlite.pragma("foreign_keys = ON");
 
   _db = drizzle(sqlite, { schema });
-  migrate(_db, { migrationsFolder: path.resolve(getProjectRoot(), "drizzle") });
+  if (migrateOnOpen) {
+    migrate(_db, { migrationsFolder: path.resolve(getProjectRoot(), "drizzle") });
+  }
   return _db;
 }
 

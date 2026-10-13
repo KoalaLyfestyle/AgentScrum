@@ -23,12 +23,11 @@ process.on("unhandledRejection", (reason) => {
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
-import { readdirSync, statSync } from "fs";
-import { homedir } from "os";
 
 import { getDb } from "../db/index.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 import * as scrum from "../services/scrum.js";
+import { discoverSessionId } from "./session.js";
 
 // Session registry: cwd → CC session ID.
 // Populated by the agent calling scrum_register_session at PM phase start.
@@ -53,26 +52,9 @@ const RELEASE_BASE_DESCRIPTION =
   "Call this when abandoning an issue or handing off work. " +
   "Optionally pass agent_id to enforce that only the claiming agent can release.";
 
-/**
- * Auto-discover the current Claude Code session ID from the transcript directory.
- * CC writes JSONL transcripts to ~/.claude/projects/<cwd-with-slashes-as-hyphens>/.
- * The most recently modified .jsonl file is the current session.
- */
-export function discoverSessionId(cwd: string, projectsBaseDir?: string): string | undefined {
-  try {
-    const encoded = cwd.replace(/[/\\]/g, "-");
-    const base = projectsBaseDir ?? path.join(homedir(), ".claude", "projects");
-    const projectDir = path.join(base, encoded);
-    const files = readdirSync(projectDir)
-      .filter((f) => f.endsWith(".jsonl"))
-      .map((f) => ({ name: f, mtime: statSync(path.join(projectDir, f)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime);
-    if (files.length === 0) return undefined;
-    return files[0]!.name.replace(/\.jsonl$/, "");
-  } catch {
-    return undefined;
-  }
-}
+// Re-exported for existing importers; lives in its own module so tests can
+// import it without starting the server or opening the database.
+export { discoverSessionId };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

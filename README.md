@@ -9,38 +9,70 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 Requires Node 24 LTS (tested on 24.21.0, pinned in `.nvmrc`). `better-sqlite3` is a native addon, so install, build, and run with the same Node. `npm run doctor` prints the Node path, version, and architecture, and checks that the addon loads.
 
 ```bash
-# 1. Clone and install
+# 1. Clone and select the pinned Node
 git clone https://github.com/KoalaLyfestyle/AgentScrum.git
 cd AgentScrum
-npm install
+nvm install && nvm use       # reads .nvmrc
+nvm alias default 24         # the scrum CLI runs with "#!/usr/bin/env node"
 
-# 2. Apply DB migrations
+# 2. Install, build, and check the runtime
+npm ci
+npm run build
+npm run doctor               # expect "better-sqlite3: OK"
+
+# 3. Apply DB migrations
 npm run db:migrate
 
-# 3. Link the CLI globally (one-time setup)
+# 4. Link the CLI globally (one-time setup)
 npm link
 
-# 4. Verify
+# 5. Verify
 scrum --version          # 0.2.0
 scrum --help             # full command reference
 ```
 
-> The `scrum` CLI runs TypeScript directly via `tsx` — no build needed for CLI use.
-> The **MCP server** requires a build step (`npm run build`) and runs from `dist/` for stability.
-> Without `npm link`, the CLI also works as `npx tsx src/cli/index.ts <args>`.
+> The `scrum` CLI runs TypeScript directly via `tsx` and uses whichever `node` is first on your PATH. If that is not Node 24, the CLI stops with a runtime error. Use `nvm alias default 24`, or run it as `npx tsx src/cli/index.ts <args>` from a Node 24 shell.
+> The **MCP server** runs from `dist/` for stability. Run `npm run build` after any server source change, then restart Claude Code.
 
 ```bash
-# 5. Create your first project (interactive DoD prompt)
+# 6. Create your first project (interactive DoD prompt)
 scrum init myproject
+# init prints a CLAUDE.md snippet; add it to that project's CLAUDE.md
 
-# 6. Build and register the MCP server with Claude Code
-npm run build
-claude mcp add agentscrum node /absolute/path/to/dist/mcp/server.js
+# 7. Register the MCP server with Claude Code
+claude mcp add agentscrum --scope user \
+  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
+  -- "$(nvm which 24.21.0)" /absolute/path/to/dist/mcp/server.js
 ```
 
-> Run `npm run build` after any changes to server source before restarting Claude Code. Using the compiled JS (not `tsx`) keeps startup fast and stable — `tsx` loads the full TypeScript compiler on every start, which causes the server to go down under memory pressure.
+Use absolute paths for the Node binary, `SCRUM_DB_PATH`, and `server.js`. A bare `node` resolves from whatever PATH the client has, which can be a different Node version than the one that built `better-sqlite3`. `--scope user` makes the tools available in every project; the default `local` scope applies to one directory only.
 
 Once registered, all 27 MCP tools are available in every Claude Code session.
+
+### Changing Node versions
+
+The native addon is built for one Node version. After switching (for example, a new Node 24 patch):
+
+```bash
+nvm install <version> && nvm use <version>   # also update .nvmrc if you change the pin
+npm ci
+npm run build
+npm run doctor                                # expect "better-sqlite3: OK"
+claude mcp remove agentscrum --scope user
+claude mcp add agentscrum --scope user \
+  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
+  -- "$(nvm which <version>)" /absolute/path/to/dist/mcp/server.js
+```
+
+### Starting fresh
+
+```bash
+mkdir -p ~/agentscrum-old
+mv /absolute/path/to/agentscrum.db* ~/agentscrum-old/   # moves the .db, -wal, and -shm files together
+scrum init <project>                                    # creates and migrates a new database
+```
+
+Then register the MCP server as in step 7 and add the CLAUDE.md snippet that `init` prints to each project.
 
 ## Project Selection
 
@@ -337,7 +369,7 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 ## Development checks
 
 ```bash
-npm ci && npm run build && npm test          # root: 68 tests in 4 suites
+npm ci && npm run build && npm test          # root: 69 tests in 5 suites
 cd dashboard && npm ci && npm run check && npm test   # dashboard: 12 tests
 ```
 

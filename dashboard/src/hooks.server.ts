@@ -2,6 +2,7 @@
 // the CLI and MCP server (src/db/path.ts). Relative paths resolve from the
 // AgentScrum checkout, never from the dashboard's working directory.
 import { existsSync } from 'fs';
+import { setMigrateOnOpen } from '$scrum/db/index.js';
 import {
 	resolveDbPath,
 	setProjectRoot,
@@ -15,12 +16,14 @@ import {
 declare const __AGENTSCRUM_ROOT__: string;
 
 setProjectRoot(__AGENTSCRUM_ROOT__);
+// Viewing a database must not change it: no migrations from the dashboard.
+setMigrateOnOpen(false);
 const dbPath = resolveDbPath();
 
 if (dbPath !== ':memory:' && !existsSync(dbPath)) {
 	throw new Error(
 		`AgentScrum database not found at ${dbPath}.\n` +
-			`The dashboard is read-only and will not create an empty database.\n` +
+			`The dashboard does not create or migrate databases.\n` +
 			`Fix: run "npm run db:migrate" (or "scrum init <name>") in the AgentScrum checkout, ` +
 			`or set ${CANONICAL_DB_ENV} to the database the CLI/MCP server uses.`
 	);

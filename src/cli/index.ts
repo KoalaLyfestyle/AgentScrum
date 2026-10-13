@@ -84,7 +84,7 @@ program
       "  SCRUM_PROJECT_ID   fallback project ID if no project name is passed",
     ].join("\n")
   )
-  .version("0.1.0")
+  .version("0.2.0")
   .addHelpCommand("help [command]", "Display help for a command");
 
 registerInit(program);

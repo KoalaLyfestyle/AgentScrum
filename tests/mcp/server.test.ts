@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { discoverSessionId } from "../../src/mcp/server.js";
+// Import the helper module, not server.ts: server.ts starts the MCP server and
+// opens the database when it loads.
+import { discoverSessionId } from "../../src/mcp/session.js";
 
 describe("discoverSessionId", () => {
   const tmpBase = join(tmpdir(), `agentscrum-test-${process.pid}`);
