@@ -137,6 +137,14 @@ test("CLI with migrations off does not create a missing database", () => {
   expect(fs.existsSync(db)).toBe(false);
 });
 
+test("doctor prints the database path the CLI resolves, and the .env override", () => {
+  const db = path.join(tmp, "agentscrum.db");
+  const res = run("doctor", [], { SCRUM_DB_PATH: db });
+  expect(res.status).toBe(0);
+  expect(res.stdout).toContain(`database:     ${db} (missing; from SCRUM_DB_PATH)`);
+  expect(fs.existsSync(db)).toBe(false);
+});
+
 test("unknown role fails with the list of roles", () => {
   const res = run("nope", [], {});
   expect(res.status).toBe(64);

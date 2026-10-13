@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 'use strict';
-// Prints the Node runtime and checks that better-sqlite3 loads in it.
+// Prints the Node runtime, checks that better-sqlite3 loads in it, and prints
+// the database path the CLI and MCP server resolve, so you can compare them.
 // Usage: npm run doctor            (uses the node on PATH)
 //        /path/to/node scripts/doctor.cjs   (check the node an MCP client uses)
-// Read-only: opens an in-memory database only. Never touches agentscrum.db.
+// Read-only: opens an in-memory database only. For agentscrum.db it only
+// checks whether the file exists.
 const { resolve } = require('path');
 const fs = require('fs');
 
@@ -31,4 +33,41 @@ try {
   console.log(`  ${String(err && err.message).replace(/\s*\n\s*/g, ' ').trim()}`);
   console.log(`Fix: with this same node, run "npm rebuild better-sqlite3" in ${root}`);
 }
-process.exit(ok ? 0 : 1);
+// Database path, with the same rules as the CLI and MCP server (src/db/path.ts).
+async function printDbPaths() {
+  const pathModule = resolve(root, 'dist', 'db', 'path.js');
+  if (!fs.existsSync(pathModule)) {
+    console.log('database:     unknown (run "npm run build" first)');
+    return;
+  }
+  const { pathToFileURL } = require('url');
+  const { resolveDbPath } = await import(pathToFileURL(pathModule).href);
+  const { cliEnv } = require(resolve(root, 'scripts', 'env-file.cjs'));
+  const describe = (env) => {
+    try {
+      const p = resolveDbPath(env, root);
+      const source = env.SCRUM_DB_PATH ? 'SCRUM_DB_PATH' : env.AGENTSCRUM_DB_PATH ? 'AGENTSCRUM_DB_PATH' : 'default';
+      const state = p === ':memory:' ? 'in memory' : fs.existsSync(p) ? 'exists' : 'missing';
+      return { path: p, text: `${p} (${state}; from ${source})` };
+    } catch (err) {
+      ok = false;
+      return { path: null, text: `ERROR ${String(err && err.message).replace(/\s*\n\s*/g, ' ')}` };
+    }
+  };
+  const shell = describe(process.env);
+  const cli = describe(cliEnv(resolve(root, '.env')));
+  console.log(`database:     ${shell.text}`);
+  if (cli.path !== shell.path) {
+    console.log(`database (scrum CLI, with .env): ${cli.text}`);
+    console.log('WARN: .env changes the CLI database. Register the MCP server with the same SCRUM_DB_PATH.');
+  }
+  console.log('The MCP server uses this path only if its registration passes the same SCRUM_DB_PATH (or none).');
+}
+
+printDbPaths().then(
+  () => process.exit(ok ? 0 : 1),
+  (err) => {
+    console.log(`database:     ERROR ${err && err.message}`);
+    process.exit(1);
+  }
+);

@@ -46,7 +46,7 @@ nvm alias default 24         # the scrum CLI runs with "#!/usr/bin/env node"
 # 2. Install, build, and check the runtime
 npm ci
 npm run build
-npm run doctor               # expect "better-sqlite3: OK"
+npm run doctor               # expect "better-sqlite3: OK"; also prints the database path
 
 # 3. Apply DB migrations
 npm run db:migrate
@@ -63,15 +63,21 @@ scrum --help             # full command reference
 > The **MCP server** runs from `dist/` for stability. Run `npm run build` after any server source change, then restart Claude Code.
 
 ```bash
-# 6. Create your first project (interactive DoD prompt)
-scrum init myproject
-# init prints a CLAUDE.md snippet; add it to that project's CLAUDE.md
-
-# 7. Register the MCP server with Claude Code
+# 6. Register the MCP server with Claude Code, from the AgentScrum checkout.
+#    It uses the same database the CLI uses by default: <checkout>/agentscrum.db.
 claude mcp add agentscrum --scope user \
-  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
-  -- "$(nvm which 24.21.0)" /absolute/path/to/dist/mcp/server.js
+  -e SCRUM_DB_PATH="$PWD/agentscrum.db" \
+  -- "$(nvm which 24.21.0)" "$PWD/dist/mcp/server.js"
+
+# 7. Create your first project: cd into the project you want to track first
+cd ~/code/myproject
+scrum init myproject         # interactive DoD prompt
+# init prints a CLAUDE.md snippet; add it to that project's CLAUDE.md
 ```
+
+`scrum init` records the current folder as the project's folder. Later, running `scrum` anywhere inside that folder picks the project automatically, so run `init` from the project you are tracking, not from the AgentScrum checkout.
+
+The CLI and the MCP server must use the same database. If you set `SCRUM_DB_PATH` in your shell profile or in `<checkout>/.env`, pass the same absolute path to `claude mcp add`. `npm run doctor` prints the path the CLI resolves and warns when `.env` changes it; compare it with the `SCRUM_DB_PATH` in your MCP registration (`claude mcp get agentscrum`).
 
 Use absolute paths for the Node binary, `SCRUM_DB_PATH`, and `server.js`. A bare `node` resolves from whatever PATH the client has, which can be a different Node version than the one that built `better-sqlite3`. `--scope user` makes the tools available in every project; the default `local` scope applies to one directory only.
 
@@ -100,7 +106,7 @@ mv /absolute/path/to/agentscrum.db* ~/agentscrum-old/   # moves the .db, -wal, a
 scrum init <project>                                    # creates and migrates a new database
 ```
 
-Then register the MCP server as in step 7 and add the CLAUDE.md snippet that `init` prints to each project.
+Then register the MCP server as in step 6 and add the CLAUDE.md snippet that `init` prints to each project.
 
 ## Project Selection
 
@@ -461,8 +467,8 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 ## Development checks
 
 ```bash
-npm ci && npm run build && npm test          # root: 79 tests in 7 suites
-cd dashboard && npm ci && npm run check && npm test   # dashboard: 12 tests
+npm ci && npm run build && npm test          # root: 81 tests in 7 suites
+cd dashboard && npm ci && npm run check && npm test   # dashboard: 15 tests
 ```
 
 Counts are from the last run on Node 24.21.0. `tests/integration/container-roles.test.ts` runs the container entry point natively. To run the same MCP check against the real container, see [Container](#container) and `scripts/mcp-smoke.mjs`.
