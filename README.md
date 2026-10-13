@@ -4,9 +4,37 @@ Scrum management for agent swarms. Exposes sprint state via an MCP server so any
 
 A cold-start agent calls `scrum_get_work_package` with a capacity in story points and receives a complete, fully-briefed task list (title, description, ACs, DoD) in one shot. No cascading reads.
 
-## Quick Start
+## Quick Start (container)
 
-Requires Node 24 LTS (tested on 24.21.0, pinned in `.nvmrc`). `better-sqlite3` is a native addon, so install, build, and run with the same Node. `npm run doctor` prints the Node path, version, and architecture, and checks that the addon loads.
+The container is the supported install path. The image fixes the Node version and the native `better-sqlite3` build, so your own Node setup does not matter. You need Docker (Docker Desktop on macOS).
+
+```bash
+git clone https://github.com/KoalaLyfestyle/AgentScrum.git
+cd AgentScrum
+docker compose up -d --build        # builds the image, runs migrate once, starts the dashboard
+curl http://127.0.0.1:5180/healthz  # {"ok":true,"migrations":14}
+```
+
+Register the MCP server with Claude Code. Each session starts its own short-lived container on the shared database:
+
+```bash
+claude mcp add agentscrum --scope user -- "$PWD/bin/agentscrum-mcp"
+```
+
+Use the CLI through Compose. Always name the project: the container cannot see your working directory, so it cannot detect the project from it.
+
+```bash
+docker compose run --rm cli init myproject          # once per project
+docker compose run --rm cli myproject status
+```
+
+The dashboard is at http://127.0.0.1:5180. Data lives in the Docker volume `agentscrum-data` and survives `docker compose restart`, `down`, and rebuilds. `docker compose down -v` deletes it.
+
+Tested platforms: the native install on macOS arm64 and Linux x86_64. The container files are new in this release; see [Container](#container) for what has been checked.
+
+## Native install (Node 24)
+
+Use this if you do not want Docker, or to develop AgentScrum. Requires Node 24 LTS (tested on 24.21.0, pinned in `.nvmrc`). `better-sqlite3` is a native addon, so install, build, and run with the same Node. `npm run doctor` prints the Node path, version, and architecture, and checks that the addon loads.
 
 ```bash
 # 1. Clone and select the pinned Node
@@ -314,6 +342,43 @@ npx tsx scripts/export-sprint.ts --sprint <N> [--project <id>]
 # Writes: projects/<name>/sprints/sprint-N.md, decisions/, lessons/
 ```
 
+## Container
+
+One image, several roles. `docker/entrypoint.sh` picks the role from the first argument; `compose.yaml` wires them up.
+
+| Role | How it runs | What it does |
+|---|---|---|
+| `migrate` | `docker compose up` runs it once, first | The only process that changes the schema |
+| `dashboard` | Compose service, `127.0.0.1:5180` | Read-only dashboard; `GET /healthz` returns 200 when every migration is applied, 503 with the reason otherwise |
+| `mcp` | `bin/agentscrum-mcp`, one container per Claude Code session | MCP over stdio. Does not migrate, and refuses a missing or out-of-date database |
+| `cli` | `docker compose run --rm cli <project> <command>` | The `scrum` CLI |
+| `backup` | `docker compose run --rm backup` | WAL-safe snapshot into `./backups/` |
+| `restore` | `docker compose run --rm restore /backups/<file>.db` | Restores into the separate volume `agentscrum-restore` and checks row counts |
+| `import` | see below | Copies an existing database into an empty `agentscrum-data` volume |
+
+Port 5180 is bound to `127.0.0.1` only. It does not clash with Langfuse (3000).
+
+**Move from a native install.** Import your database into a fresh volume before the first `up`:
+
+```bash
+docker compose build
+AGENTSCRUM_IMPORT_DIR=/absolute/path/to/folder/with/the/db \
+  docker compose run --rm import /import/agentscrum.db   # refuses if the volume already has a database
+docker compose up -d                                       # migrate brings the schema up to date
+```
+
+The import uses SQLite's online backup API on a read-only connection, so it copies a consistent snapshot, including writes still in the WAL, and never changes the source. It checks that every table's row count matches. Try it on a copy first if you want to be careful.
+
+**Restore a backup.** `restore` writes to the `agentscrum-restore` volume, never to `agentscrum-data`. After checking it (`docker run --rm -v agentscrum-restore:/data agentscrum:local counts /data/agentscrum.db`), stop the stack and copy it over, or point Compose at it.
+
+**Limits.**
+
+- `COST_SOURCE=transcript` does not work in the container: it reads Claude Code transcripts under your home folder, which the container cannot see. The container uses `manual`.
+- CLI project detection from the working directory does not work in the container; pass the project name.
+- MCP runs over stdio only. Each session starts a container, which adds about a second to session start.
+
+**What has been checked.** The roles were run natively through `docker/entrypoint.sh` on Linux x86_64 with Node 24.21.0: migrate, two MCP servers with a claim race (one winner), backup, restore, import, and the production dashboard build with `/healthz`. `npm test` covers this. The image build and `docker compose up` still need a run on a machine with Docker access.
+
 ## Dashboard
 
 A read-only SvelteKit web dashboard that reads directly from the AgentScrum SQLite DB.
@@ -350,6 +415,8 @@ One setting decides where the SQLite file lives, for the CLI, MCP server, migrat
 
 ## Environment Variables
 
+The container sets `SCRUM_DB_PATH=/data/agentscrum.db`, `SCRUM_MIGRATE_ON_OPEN=0`, and `COST_SOURCE=manual`.
+
 ```bash
 SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: <checkout>/agentscrum.db; alias: AGENTSCRUM_DB_PATH)
 OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
@@ -364,16 +431,17 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 | `SCRUM_PROJECT_ID`    | —                  | Used by MCP server and scripts; CLI takes project name as first argument                                                                                                                                                  |
 | `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts`                                                                                                                                                                                         |
 | `SCRUM_MODEL_PRICES`  | —                  | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
+| `SCRUM_MIGRATE_ON_OPEN` | on               | `0` stops the CLI and MCP server from applying migrations when they open the database. The MCP server then refuses a missing or out-of-date database. The container sets it. |
 | `COST_SOURCE`         | `manual`           | Cost collection mode. `off` — no token tracking. `manual` — agent passes `tokens_used` to `scrum_log_session`. `transcript` — auto-reads tokens from Claude Code JSONL transcripts; requires `scrum_register_session` at session start and `scrum_assign_issue`/`scrum_release_issue` around each issue. |
 
 ## Development checks
 
 ```bash
-npm ci && npm run build && npm test          # root: 69 tests in 5 suites
+npm ci && npm run build && npm test          # root: 79 tests in 7 suites
 cd dashboard && npm ci && npm run check && npm test   # dashboard: 12 tests
 ```
 
-Counts are from the last run on Node 24.21.0.
+Counts are from the last run on Node 24.21.0. `tests/integration/container-roles.test.ts` runs the container entry point natively. To run the same MCP check against the real container, see [Container](#container) and `scripts/mcp-smoke.mjs`.
 
 ## Stack
 
