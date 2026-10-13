@@ -9,6 +9,8 @@
  *   SCRUM_DB_PATH     — SQLite file path (default: <checkout>/agentscrum.db;
  *                       relative paths resolve from the checkout; alias: AGENTSCRUM_DB_PATH)
  *   SCRUM_PROJECT_ID  — default project ID for tools that omit project_id
+ *   SCRUM_MIGRATE_ON_OPEN — 0 to skip migrations at startup (the container sets
+ *                       this; the server then refuses an unmigrated database)
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,7 +26,7 @@ import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
 
-import { getDb } from "../db/index.js";
+import { checkSchema, getDb, shouldMigrateOnOpen } from "../db/index.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 import * as scrum from "../services/scrum.js";
 import { discoverSessionId } from "./session.js";
@@ -62,6 +64,18 @@ warnIfUnsupportedNode();
 // Trigger DB initialization (migrations run inside getDb() on first call).
 // Fail fast with a non-zero exit so the MCP client reports the startup error.
 try {
+  if (!shouldMigrateOnOpen()) {
+    // Migrations are someone else's job here (the container's migrate step).
+    // Refuse to start on a missing or out-of-date database instead of failing
+    // later with "no such table".
+    const status = checkSchema();
+    if (!status.ok) {
+      throw new Error(
+        `${status.reason}. This server does not migrate (SCRUM_MIGRATE_ON_OPEN=0). ` +
+          `Run the migrate step first (docker compose up -d, or npm run db:migrate).`
+      );
+    }
+  }
   getDb();
 } catch (err) {
   process.stderr.write(`[agentscrum-mcp] startup failed: ${err instanceof Error ? err.message : err}\n`);

@@ -1,0 +1,90 @@
+# AgentScrum single-machine demo. Start: docker compose up -d --build
+#
+# One image, several roles, one SQLite database on the named volume
+# agentscrum-data. `up` runs migrate once, then the dashboard on
+# http://127.0.0.1:5180 (Langfuse uses 3000, so no clash).
+# The MCP server is not a service here: each Claude Code session starts its own
+# container through bin/agentscrum-mcp.
+name: agentscrum
+
+x-agentscrum: &agentscrum
+  image: ${AGENTSCRUM_IMAGE:-agentscrum:local}
+  build: .
+  init: true
+  volumes:
+    - agentscrum-data:/data
+
+services:
+  migrate:
+    <<: *agentscrum
+    command: ["migrate"]
+    restart: "no"
+
+  dashboard:
+    <<: *agentscrum
+    command: ["dashboard"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:5180:5180"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5180/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # docker compose run --rm cli <project> status   (always name the project:
+  # the container cannot see your working directory)
+  cli:
+    <<: *agentscrum
+    profiles: ["tools"]
+    entrypoint: ["agentscrum", "cli"]
+    command: ["--help"]
+
+  # docker compose run --rm backup     -> ./backups/agentscrum-<time>.db
+  backup:
+    <<: *agentscrum
+    profiles: ["tools"]
+    command: ["backup"]
+    volumes:
+      # Not :ro. Reading a WAL database needs its -shm file; the tool still
+      # opens the database read-only.
+      - agentscrum-data:/data
+      - ./backups:/backups
+
+  # docker compose run --rm restore /backups/<file>.db
+  # Writes into the separate volume agentscrum-restore and checks row counts.
+  # Swap volumes only after you have checked it (see README).
+  restore:
+    <<: *agentscrum
+    profiles: ["tools"]
+    entrypoint: ["agentscrum", "restore"]
+    command: []
+    volumes:
+      - agentscrum-restore:/restore
+      - ./backups:/backups:ro
+
+  # AGENTSCRUM_IMPORT_DIR=/path/to/folder docker compose run --rm import /import/<file>.db
+  # Copies an existing database into an empty agentscrum-data. The source is
+  # opened read-only; point it at a copy, not the live file (see README).
+  import:
+    <<: *agentscrum
+    profiles: ["tools"]
+    entrypoint: ["agentscrum", "import"]
+    command: []
+    volumes:
+      - agentscrum-data:/data
+      - ${AGENTSCRUM_IMPORT_DIR:-./import}:/import
+
+volumes:
+  agentscrum-data:
+    name: agentscrum-data
+  agentscrum-restore:
+    name: agentscrum-restore

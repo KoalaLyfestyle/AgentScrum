@@ -1,0 +1,27 @@
+#!/bin/sh
+# Start the AgentScrum MCP server in a container and speak MCP over stdio.
+#
+#   claude mcp add agentscrum --scope user -- /absolute/path/to/bin/agentscrum-mcp
+#
+# Each client session gets its own short-lived container on the shared
+# agentscrum-data volume. The container does not migrate; run
+# `docker compose up -d` (which runs migrate) first.
+#
+# Plain `docker run`, not `docker compose run`: compose can print progress on
+# stdout, and stdout must carry only MCP JSON-RPC. --pull never keeps Docker
+# from downloading anything (and printing about it) at session start.
+set -eu
+image="${AGENTSCRUM_IMAGE:-agentscrum:local}"
+volume="${AGENTSCRUM_VOLUME:-agentscrum-data}"
+
+if ! docker image inspect "$image" >/dev/null 2>&1; then
+  echo "agentscrum-mcp: image $image not found. Build it: docker compose build" >&2
+  exit 1
+fi
+
+# -e NAME passes the variable only when it is set on the host.
+exec docker run -i --rm --init --pull never \
+  -v "$volume:/data" \
+  -e SCRUM_PROJECT_ID \
+  -e SCRUM_MODEL_PRICES \
+  "$image" mcp

@@ -1,7 +1,11 @@
 import { json, error } from '@sveltejs/kit';
-import { listSprints, listIssues, getSprintSummary, issueKey } from '$scrum/services/scrum.js';
-import { getDbPath } from '$scrum/db/index.js';
-import { openSqlite } from '$scrum/db/open.js';
+import {
+	listSprints,
+	listIssues,
+	listEpics,
+	getSprintSummary,
+	issueKey
+} from '$scrum/services/scrum.js';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
@@ -36,15 +40,6 @@ const SprintResponseSchema = z.object({
 	isClosed: z.boolean()
 });
 
-function getEpicNumberMap(dbPath: string, projectId: number): Map<number, number> {
-	const db = openSqlite(dbPath, { readonly: true, fileMustExist: true });
-	const rows = db
-		.prepare('SELECT id, number FROM epics WHERE project_id = ?')
-		.all(projectId) as { id: number; number: number }[];
-	db.close();
-	return new Map(rows.map((e) => [e.id, e.number]));
-}
-
 export const GET: RequestHandler = ({ url }) => {
 	const projectId = Number(url.searchParams.get('project') ?? '1');
 	if (!Number.isInteger(projectId) || projectId < 1) error(400, 'Invalid project id');
@@ -59,8 +54,8 @@ export const GET: RequestHandler = ({ url }) => {
 	const summary = getSprintSummary(displaySprint.id);
 	const issues = listIssues(displaySprint.id);
 
-	const dbPath = getDbPath();
-	const epicNumberById = getEpicNumberMap(dbPath, projectId);
+	// Through the service layer, so all DB access stays in src/db and src/services.
+	const epicNumberById = new Map(listEpics(projectId).map((e) => [e.id, e.number]));
 
 	const issuesWithKeys = issues.map((issue) => ({
 		id: issue.id,
