@@ -1,7 +1,7 @@
 import readline from "readline";
 import type { Command } from "commander";
 import { initProject, setDod } from "../../services/scrum.js";
-import { dbPath } from "../../db/index.js";
+import { getDbPath } from "../../db/index.js";
 
 async function promptDod(): Promise<string[]> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -35,7 +35,8 @@ export function registerInit(program: Command): void {
         console.log(`Project created: ${project.name} (id: ${project.id})`);
         console.log(`Sprint 1 created (id: ${sprint.id}, status: ${sprint.status})`);
 
-        if (!process.env["SCRUM_DB_PATH"]) {
+        if (!process.env["SCRUM_DB_PATH"] && !process.env["AGENTSCRUM_DB_PATH"]) {
+          const dbPath = getDbPath();
           console.warn(`\nNote: SCRUM_DB_PATH is not set — database at: ${dbPath}`);
           console.warn(`To override, set in your shell profile:`);
           console.warn(`  export SCRUM_DB_PATH=${dbPath}\n`);

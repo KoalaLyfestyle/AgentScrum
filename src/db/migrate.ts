@@ -1,14 +1,13 @@
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
-import { fileURLToPath } from "url";
 import path from "path";
+import { PROJECT_ROOT, resolveDbPath } from "./path.js";
+import { openSqlite } from "./open.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../../agentscrum.db");
-const migrationsFolder = path.resolve(__dirname, "../../drizzle");
+const dbPath = resolveDbPath();
+const migrationsFolder = path.resolve(PROJECT_ROOT, "drizzle");
 
-const sqlite = new Database(dbPath);
+const sqlite = openSqlite(dbPath);
 sqlite.pragma("journal_mode = WAL");
 // FK enforcement is disabled during migration so table recreation migrations
 // (required by SQLite's lack of ALTER COLUMN) can run without constraint errors.

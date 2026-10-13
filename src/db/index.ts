@@ -1,29 +1,41 @@
-import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { fileURLToPath } from "url";
 import path from "path";
 import * as schema from "./schema.js";
+import { getProjectRoot, resolveDbPath } from "./path.js";
+import { openSqlite } from "./open.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Fallback resolves relative to this file (src/db/ → project root) so the DB
-// lands in the right place even when SCRUM_DB_PATH is unset and CWD varies.
-export const dbPath =
-  process.env["SCRUM_DB_PATH"] ??
-  path.resolve(__dirname, "../../agentscrum.db");
-const migrationsFolder = path.resolve(__dirname, "../../drizzle");
+/**
+ * Resolved database path. Read lazily so a host process (the dashboard) can set
+ * SCRUM_DB_PATH before the first query. See src/db/path.ts for the rules.
+ */
+export function getDbPath(): string {
+  return resolveDbPath();
+}
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let migrateOnOpen = true;
+
+/**
+ * Whether getDb() applies pending migrations when it first opens the database.
+ * The dashboard turns this off so viewing a database never changes its schema.
+ * Call before the first getDb().
+ */
+export function setMigrateOnOpen(enabled: boolean): void {
+  migrateOnOpen = enabled;
+}
 
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
 
-  const sqlite = new Database(dbPath);
+  const sqlite = openSqlite(getDbPath());
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 
   _db = drizzle(sqlite, { schema });
-  migrate(_db, { migrationsFolder });
+  if (migrateOnOpen) {
+    migrate(_db, { migrationsFolder: path.resolve(getProjectRoot(), "drizzle") });
+  }
   return _db;
 }
 
@@ -31,5 +43,9 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
 export function _resetDb(): void {
   _db = null;
 }
+
+// Re-exported so the dashboard builds queries with the same drizzle-orm copy
+// that owns the schema objects (one drizzle version in the process).
+export { inArray, eq, and, desc, asc, sql } from "drizzle-orm";
 
 export { schema };

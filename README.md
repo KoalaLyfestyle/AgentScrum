@@ -6,39 +6,73 @@ A cold-start agent calls `scrum_get_work_package` with a capacity in story point
 
 ## Quick Start
 
+Requires Node 24 LTS (tested on 24.21.0, pinned in `.nvmrc`). `better-sqlite3` is a native addon, so install, build, and run with the same Node. `npm run doctor` prints the Node path, version, and architecture, and checks that the addon loads.
+
 ```bash
-# 1. Clone and install
+# 1. Clone and select the pinned Node
 git clone https://github.com/KoalaLyfestyle/AgentScrum.git
 cd AgentScrum
-npm install
+nvm install && nvm use       # reads .nvmrc
+nvm alias default 24         # the scrum CLI runs with "#!/usr/bin/env node"
 
-# 2. Apply DB migrations
+# 2. Install, build, and check the runtime
+npm ci
+npm run build
+npm run doctor               # expect "better-sqlite3: OK"
+
+# 3. Apply DB migrations
 npm run db:migrate
 
-# 3. Link the CLI globally (one-time setup)
+# 4. Link the CLI globally (one-time setup)
 npm link
 
-# 4. Verify
+# 5. Verify
 scrum --version          # 0.2.0
 scrum --help             # full command reference
 ```
 
-> The `scrum` CLI runs TypeScript directly via `tsx` — no build needed for CLI use.
-> The **MCP server** requires a build step (`npm run build`) and runs from `dist/` for stability.
-> Without `npm link`, the CLI also works as `npx tsx src/cli/index.ts <args>`.
+> The `scrum` CLI runs TypeScript directly via `tsx` and uses whichever `node` is first on your PATH. If that is not Node 24, the CLI stops with a runtime error. Use `nvm alias default 24`, or run it as `npx tsx src/cli/index.ts <args>` from a Node 24 shell.
+> The **MCP server** runs from `dist/` for stability. Run `npm run build` after any server source change, then restart Claude Code.
 
 ```bash
-# 5. Create your first project (interactive DoD prompt)
+# 6. Create your first project (interactive DoD prompt)
 scrum init myproject
+# init prints a CLAUDE.md snippet; add it to that project's CLAUDE.md
 
-# 6. Build and register the MCP server with Claude Code
-npm run build
-claude mcp add agentscrum node /absolute/path/to/dist/mcp/server.js
+# 7. Register the MCP server with Claude Code
+claude mcp add agentscrum --scope user \
+  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
+  -- "$(nvm which 24.21.0)" /absolute/path/to/dist/mcp/server.js
 ```
 
-> Run `npm run build` after any changes to server source before restarting Claude Code. Using the compiled JS (not `tsx`) keeps startup fast and stable — `tsx` loads the full TypeScript compiler on every start, which causes the server to go down under memory pressure.
+Use absolute paths for the Node binary, `SCRUM_DB_PATH`, and `server.js`. A bare `node` resolves from whatever PATH the client has, which can be a different Node version than the one that built `better-sqlite3`. `--scope user` makes the tools available in every project; the default `local` scope applies to one directory only.
 
 Once registered, all 27 MCP tools are available in every Claude Code session.
+
+### Changing Node versions
+
+The native addon is built for one Node version. After switching (for example, a new Node 24 patch):
+
+```bash
+nvm install <version> && nvm use <version>   # also update .nvmrc if you change the pin
+npm ci
+npm run build
+npm run doctor                                # expect "better-sqlite3: OK"
+claude mcp remove agentscrum --scope user
+claude mcp add agentscrum --scope user \
+  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
+  -- "$(nvm which <version>)" /absolute/path/to/dist/mcp/server.js
+```
+
+### Starting fresh
+
+```bash
+mkdir -p ~/agentscrum-old
+mv /absolute/path/to/agentscrum.db* ~/agentscrum-old/   # moves the .db, -wal, and -shm files together
+scrum init <project>                                    # creates and migrates a new database
+```
+
+Then register the MCP server as in step 7 and add the CLAUDE.md snippet that `init` prints to each project.
 
 ## Project Selection
 
@@ -104,7 +138,7 @@ scrum_update_issue_status { "issue_id": 3, "status": "done" }
 scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "auditor": "pass" }
 ```
 
-## MCP Tools (26)
+## MCP Tools (27)
 
 ### Read
 
@@ -294,11 +328,7 @@ npm run dev:dashboard
 cd dashboard && npm run dev
 ```
 
-**Environment variables for the dashboard:**
-
-```bash
-AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agentscrum.db)
-```
+The dashboard reads the same database as the CLI and MCP server, using the rules in [Database location](#database-location). It never creates a database: if the file is missing, it stops with a message that says how to create it. Install the root package (`npm ci` in the repo root) before the dashboard; the dashboard uses the root's `drizzle-orm`.
 
 **URL params:**
 
@@ -309,10 +339,19 @@ AGENTSCRUM_DB_PATH=/absolute/path/to/agentscrum.db  # DB path (default: ../agent
 | `?nav=none` | none | Hide nav entirely (embed mode for Orion main dashboard) |
 | `?view=<name>` | overview, live, sprint, sprints, epics, issues, velocity, tokens, decisions, lessons | Active view |
 
+## Database location
+
+One setting decides where the SQLite file lives, for the CLI, MCP server, migrations, scripts, and dashboard (`src/db/path.ts`):
+
+- `SCRUM_DB_PATH` is the canonical setting. `AGENTSCRUM_DB_PATH` is accepted as an alias.
+- Unset: `<checkout>/agentscrum.db`.
+- Relative paths resolve from the AgentScrum checkout, not the working directory.
+- If both variables are set to different files, commands stop with an error instead of picking one.
+
 ## Environment Variables
 
 ```bash
-SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: <project-root>/agentscrum.db)
+SCRUM_DB_PATH=/absolute/path/to/agentscrum.db   # SQLite path (default: <checkout>/agentscrum.db; alias: AGENTSCRUM_DB_PATH)
 OBSIDIAN_VAULT_PATH=/path/to/obsidian/vault      # for export-sprint.ts (default: ~/obsidian-vault)
 SCRUM_PROJECT_ID=1                               # MCP server / script fallback
 SCRUM_MODEL_PRICES='{"claude-sonnet-4-6":3.00}'  # $/1M tokens — enables cost reporting
@@ -321,11 +360,20 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 
 | Variable              | Default            | Description                                                                                                                                                                                                               |
 | --------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SCRUM_DB_PATH`       | `<project-root>/agentscrum.db` | SQLite path — defaults to the package root; set to override                                                                                                                                                           |
+| `SCRUM_DB_PATH`       | `<checkout>/agentscrum.db` | SQLite path. Relative values resolve from the checkout. `AGENTSCRUM_DB_PATH` is an alias; conflicting values are an error.                                                                                       |
 | `SCRUM_PROJECT_ID`    | —                  | Used by MCP server and scripts; CLI takes project name as first argument                                                                                                                                                  |
 | `OBSIDIAN_VAULT_PATH` | `~/obsidian-vault` | Vault root for `export-sprint.ts`                                                                                                                                                                                         |
 | `SCRUM_MODEL_PRICES`  | —                  | JSON map of model name → $/1M tokens. When set, `scrum cost` and `scrum_get_cost_report` show estimated dollar figures alongside token counts. When unset, only tokens are shown. Example: `'{"claude-sonnet-4-6":3.00}'` |
 | `COST_SOURCE`         | `manual`           | Cost collection mode. `off` — no token tracking. `manual` — agent passes `tokens_used` to `scrum_log_session`. `transcript` — auto-reads tokens from Claude Code JSONL transcripts; requires `scrum_register_session` at session start and `scrum_assign_issue`/`scrum_release_issue` around each issue. |
+
+## Development checks
+
+```bash
+npm ci && npm run build && npm test          # root: 69 tests in 5 suites
+cd dashboard && npm ci && npm run check && npm test   # dashboard: 12 tests
+```
+
+Counts are from the last run on Node 24.21.0.
 
 ## Stack
 

@@ -8,8 +8,7 @@ import {
 	getDecisions,
 	getLessons
 } from '$scrum/services/scrum.js';
-import { getDb, schema } from '$scrum/db/index.js';
-import { inArray } from 'drizzle-orm';
+import { getDb, schema, inArray } from '$scrum/db/index.js';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const projectId = Number(url.searchParams.get('project') ?? '1');

@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { listSprints, listIssues, getSprintSummary, issueKey } from '$scrum/services/scrum.js';
-import Database from 'better-sqlite3';
+import { getDbPath } from '$scrum/db/index.js';
+import { openSqlite } from '$scrum/db/open.js';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
@@ -36,7 +37,7 @@ const SprintResponseSchema = z.object({
 });
 
 function getEpicNumberMap(dbPath: string, projectId: number): Map<number, number> {
-	const db = new Database(dbPath, { readonly: true });
+	const db = openSqlite(dbPath, { readonly: true, fileMustExist: true });
 	const rows = db
 		.prepare('SELECT id, number FROM epics WHERE project_id = ?')
 		.all(projectId) as { id: number; number: number }[];
@@ -58,7 +59,7 @@ export const GET: RequestHandler = ({ url }) => {
 	const summary = getSprintSummary(displaySprint.id);
 	const issues = listIssues(displaySprint.id);
 
-	const dbPath = process.env['SCRUM_DB_PATH'] ?? '../agentscrum.db';
+	const dbPath = getDbPath();
 	const epicNumberById = getEpicNumberMap(dbPath, projectId);
 
 	const issuesWithKeys = issues.map((issue) => ({

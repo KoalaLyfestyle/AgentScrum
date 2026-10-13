@@ -11,12 +11,13 @@
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
+import { resolveDbPath } from "../src/db/path.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env["SCRUM_DB_PATH"] ?? path.resolve(__dirname, "../agentscrum.db");
+const dbPath = resolveDbPath();
 const migrationsFolder = path.resolve(__dirname, "../drizzle");
 const issuesYamlPath = path.resolve(__dirname, "../.issues.yaml");
 
