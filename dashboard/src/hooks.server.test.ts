@@ -16,6 +16,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	rmSync(dir, { recursive: true, force: true });
+	delete process.env.SCRUM_DB_PATH;
 });
 
 async function request(pathname: string) {
@@ -40,6 +41,19 @@ describe('dashboard database check', () => {
 		expect(text).toContain('database has no migrations applied');
 		expect(text).toContain('npm run db:migrate');
 		expect(resolve).not.toHaveBeenCalled();
+	});
+
+	test('a database missing the newest migration gets a 503 naming it', async () => {
+		const db = join(dir, 'old.db');
+		const sqlite = new Database(db);
+		sqlite.exec('CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric)');
+		sqlite.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)').run('x', 1);
+		sqlite.close();
+		process.env.SCRUM_DB_PATH = db;
+
+		const { response } = await request('/');
+		expect(response.status).toBe(503);
+		expect(await response.text()).toMatch(/migration\(s\) not applied: 0000_/);
 	});
 
 	test('a missing database gets a 503 and is not created', async () => {

@@ -46,7 +46,8 @@ async function printDbPaths() {
   const describe = (env) => {
     try {
       const p = resolveDbPath(env, root);
-      const source = env.SCRUM_DB_PATH ? 'SCRUM_DB_PATH' : env.AGENTSCRUM_DB_PATH ? 'AGENTSCRUM_DB_PATH' : 'default';
+      const set = (name) => Boolean(env[name] && env[name].trim());
+      const source = set('SCRUM_DB_PATH') ? 'SCRUM_DB_PATH' : set('AGENTSCRUM_DB_PATH') ? 'AGENTSCRUM_DB_PATH' : 'default';
       const state = p === ':memory:' ? 'in memory' : fs.existsSync(p) ? 'exists' : 'missing';
       return { path: p, text: `${p} (${state}; from ${source})` };
     } catch (err) {
@@ -56,10 +57,13 @@ async function printDbPaths() {
   };
   const shell = describe(process.env);
   const cli = describe(cliEnv(resolve(root, '.env')));
-  console.log(`database:     ${shell.text}`);
+  console.log(`database:     ${shell.text}`);  // what this shell, db:migrate, and the dashboard use
   if (cli.path !== shell.path) {
     console.log(`database (scrum CLI, with .env): ${cli.text}`);
-    console.log('WARN: .env changes the CLI database. Register the MCP server with the same SCRUM_DB_PATH.');
+    console.log(
+      'WARN: .env changes the database for the scrum CLI only. db:migrate, the dashboard, and the MCP server ' +
+        'use the line above. Set SCRUM_DB_PATH in your shell profile instead, and pass the same path to claude mcp add.'
+    );
   }
   console.log('The MCP server uses this path only if its registration passes the same SCRUM_DB_PATH (or none).');
 }

@@ -77,7 +77,7 @@ scrum init myproject         # interactive DoD prompt
 
 `scrum init` records the current folder as the project's folder. Later, running `scrum` anywhere inside that folder picks the project automatically, so run `init` from the project you are tracking, not from the AgentScrum checkout.
 
-The CLI and the MCP server must use the same database. If you set `SCRUM_DB_PATH` in your shell profile or in `<checkout>/.env`, pass the same absolute path to `claude mcp add`. `npm run doctor` prints the path the CLI resolves and warns when `.env` changes it; compare it with the `SCRUM_DB_PATH` in your MCP registration (`claude mcp get agentscrum`).
+The CLI, the MCP server, `npm run db:migrate`, and the dashboard must use the same database. The simplest setup is the default above. If you want another path, set `SCRUM_DB_PATH` in your shell profile and pass the same absolute path to `claude mcp add`. Avoid setting it only in `<checkout>/.env`: the `scrum` CLI reads that file, but `db:migrate`, the dashboard, and the MCP server do not. `npm run doctor` prints the path from your shell and warns when `.env` gives the CLI a different one; compare it with the `SCRUM_DB_PATH` in your MCP registration (`claude mcp get agentscrum`).
 
 Use absolute paths for the Node binary, `SCRUM_DB_PATH`, and `server.js`. A bare `node` resolves from whatever PATH the client has, which can be a different Node version than the one that built `better-sqlite3`. `--scope user` makes the tools available in every project; the default `local` scope applies to one directory only.
 
@@ -94,8 +94,8 @@ npm run build
 npm run doctor                                # expect "better-sqlite3: OK"
 claude mcp remove agentscrum --scope user
 claude mcp add agentscrum --scope user \
-  -e SCRUM_DB_PATH=/absolute/path/to/agentscrum.db \
-  -- "$(nvm which <version>)" /absolute/path/to/dist/mcp/server.js
+  -e SCRUM_DB_PATH="$PWD/agentscrum.db" \
+  -- "$(nvm which <version>)" "$PWD/dist/mcp/server.js"   # from the checkout, as in step 6
 ```
 
 ### Starting fresh
@@ -468,7 +468,7 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 
 ```bash
 npm ci && npm run build && npm test          # root: 81 tests in 7 suites
-cd dashboard && npm ci && npm run check && npm test   # dashboard: 15 tests
+cd dashboard && npm ci && npm run check && npm test   # dashboard: 16 tests
 ```
 
 Counts are from the last run on Node 24.21.0. `tests/integration/container-roles.test.ts` runs the container entry point natively. To run the same MCP check against the real container, see [Container](#container) and `scripts/mcp-smoke.mjs`.
