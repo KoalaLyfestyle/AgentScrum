@@ -361,15 +361,39 @@ Port 5180 is bound to `127.0.0.1` only. It does not clash with Langfuse (3000).
 **Move from a native install.** Import your database into a fresh volume before the first `up`:
 
 ```bash
+mkdir -p backups import
 docker compose build
 AGENTSCRUM_IMPORT_DIR=/absolute/path/to/folder/with/the/db \
   docker compose run --rm import /import/agentscrum.db   # refuses if the volume already has a database
 docker compose up -d                                       # migrate brings the schema up to date
 ```
 
-The import uses SQLite's online backup API on a read-only connection, so it copies a consistent snapshot, including writes still in the WAL, and never changes the source. It checks that every table's row count matches. Try it on a copy first if you want to be careful.
+The folder is mounted read-only and the source is opened read-only, so the import never changes it. It uses SQLite's online backup API, which includes writes still in the WAL, and checks that every table's row count matches. Close Claude Code sessions that use the database first, so it is not changing during the copy.
 
-**Restore a backup.** `restore` writes to the `agentscrum-restore` volume, never to `agentscrum-data`. After checking it (`docker run --rm -v agentscrum-restore:/data agentscrum:local counts /data/agentscrum.db`), stop the stack and copy it over, or point Compose at it.
+**Back up.** Create the folder first, so Docker does not create it as root:
+
+```bash
+mkdir -p backups
+docker compose run --rm backup          # writes ./backups/agentscrum-<UTC time>.db
+```
+
+On Linux the container runs as uid 1000. If your user has another uid, run `sudo chown 1000 backups` once. Backups are standalone files (no `-wal`), safe to copy anywhere.
+
+**Restore a backup.** `restore` writes to the separate volume `agentscrum-restore` and checks that every table's row count matches the backup. It never writes to `agentscrum-data`:
+
+```bash
+docker compose run --rm restore /backups/<file>.db
+docker run --rm -v agentscrum-restore:/data agentscrum:local counts /data/agentscrum.db
+```
+
+To switch to the restored copy, stop everything, keep the old database beside it, and copy the restored one in:
+
+```bash
+docker compose down        # also close Claude Code sessions that use AgentScrum
+docker run --rm -v agentscrum-restore:/from -v agentscrum-data:/data --entrypoint sh agentscrum:local -c \
+  'mkdir -p /data/before-restore && mv /data/agentscrum.db* /data/before-restore/ && cp /from/agentscrum.db /data/agentscrum.db'
+docker compose up -d
+```
 
 **Limits.**
 
@@ -393,7 +417,7 @@ npm run dev:dashboard
 cd dashboard && npm run dev
 ```
 
-The dashboard reads the same database as the CLI and MCP server, using the rules in [Database location](#database-location). It never creates a database: if the file is missing, it stops with a message that says how to create it. Install the root package (`npm ci` in the repo root) before the dashboard; the dashboard uses the root's `drizzle-orm`.
+The dashboard reads the same database as the CLI and MCP server, using the rules in [Database location](#database-location). It never creates or migrates a database. If the file is missing or not migrated, every page returns 503 with a message that says how to fix it, and `/healthz` returns 503 with the reason. Install the root package (`npm ci` in the repo root) before the dashboard; the dashboard uses the root's `drizzle-orm`.
 
 **URL params:**
 

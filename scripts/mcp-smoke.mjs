@@ -163,13 +163,20 @@ async function main() {
     });
 
     // Both claim at the same moment, from separate processes.
-    const [ra, rb] = await Promise.all([
-      a.call("scrum_assign_issue", { issue_id: issue.id, agent_id: "agent-a" }),
-      b.call("scrum_assign_issue", { issue_id: issue.id, agent_id: "agent-b" }),
-    ]);
+    // Alternate which request is written first, so either side can win.
+    const claimA = () => a.call("scrum_assign_issue", { issue_id: issue.id, agent_id: "agent-a" });
+    const claimB = () => b.call("scrum_assign_issue", { issue_id: issue.id, agent_id: "agent-b" });
+    const [ra, rb] =
+      process.pid % 2 === 0
+        ? await Promise.all([claimA(), claimB()])
+        : await Promise.all([claimB(), claimA()]).then(([y, x]) => [x, y]);
     const winners = [ra, rb].filter((r) => r.ok);
     summary.claim = { a: ra.ok ? "won" : ra.text, b: rb.ok ? "won" : rb.text };
     if (winners.length !== 1) throw new Error(`expected exactly one claim to succeed, got ${winners.length}`);
+    const loser = ra.ok ? rb : ra;
+    if (!/already claimed/.test(loser.text)) {
+      throw new Error(`the losing claim failed for another reason: ${loser.text}`);
+    }
     const winner = ra.ok ? a : b;
 
     await winner.must("scrum_update_issue_status", { issue_id: issue.id, status: "in_progress" });

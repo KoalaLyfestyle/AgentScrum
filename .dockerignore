@@ -7,9 +7,10 @@ dashboard/build
 dashboard/.svelte-kit
 .worktrees
 .git
-*.db
-*.db-shm
-*.db-wal
-.env
-.env.*
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/.env
+**/.env.*
 backups
+import

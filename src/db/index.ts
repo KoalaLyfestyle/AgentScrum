@@ -40,7 +40,18 @@ export function shouldMigrateOnOpen(): boolean {
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
 
-  const sqlite = openSqlite(getDbPath());
+  const dbPath = getDbPath();
+  if (!shouldMigrateOnOpen()) {
+    // Not migrating here, so never create an empty file or run on an old schema.
+    const status = checkSchema(dbPath);
+    if (!status.ok) {
+      throw new Error(
+        `${status.reason}. Migrations are off here (${MIGRATE_ON_OPEN_ENV}=0 or the dashboard). ` +
+          `Run the migrate step first: docker compose up -d, or npm run db:migrate.`
+      );
+    }
+  }
+  const sqlite = openSqlite(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 

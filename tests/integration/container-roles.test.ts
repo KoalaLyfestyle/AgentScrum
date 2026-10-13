@@ -103,6 +103,11 @@ test("backup, restore into a separate file, and import keep every row", () => {
   expect(backup.stderr).toBe("");
   expect(backup.status).toBe(0);
 
+  // The backup is a standalone rollback-journal file (header byte 18 is 1, not
+  // 2 for WAL), so it can be restored from a read-only folder.
+  expect(fs.readFileSync(backupFile)[18]).toBe(1);
+  expect(fs.existsSync(`${backupFile}-wal`)).toBe(false);
+
   const restored = path.join(tmp, "restore", "agentscrum.db");
   const restore = run("restore", [backupFile, "--to", restored], {});
   expect(restore.status).toBe(0);
@@ -123,6 +128,14 @@ test("backup, restore into a separate file, and import keep every row", () => {
   expect(run("counts", [imported], {}).stdout).toBe(original);
   expect(run("import", [db], { SCRUM_DB_PATH: imported }).status).toBe(1);
 }, 60_000);
+
+test("CLI with migrations off does not create a missing database", () => {
+  const db = path.join(tmp, "missing.db");
+  const res = run("cli", ["demo", "status"], { SCRUM_DB_PATH: db });
+  expect(res.status).not.toBe(0);
+  expect(res.stderr).toMatch(/database not found/);
+  expect(fs.existsSync(db)).toBe(false);
+});
 
 test("unknown role fails with the list of roles", () => {
   const res = run("nope", [], {});

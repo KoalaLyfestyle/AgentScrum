@@ -26,7 +26,7 @@ import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
 
-import { checkSchema, getDb, shouldMigrateOnOpen } from "../db/index.js";
+import { getDb } from "../db/index.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 import * as scrum from "../services/scrum.js";
 import { discoverSessionId } from "./session.js";
@@ -64,18 +64,8 @@ warnIfUnsupportedNode();
 // Trigger DB initialization (migrations run inside getDb() on first call).
 // Fail fast with a non-zero exit so the MCP client reports the startup error.
 try {
-  if (!shouldMigrateOnOpen()) {
-    // Migrations are someone else's job here (the container's migrate step).
-    // Refuse to start on a missing or out-of-date database instead of failing
-    // later with "no such table".
-    const status = checkSchema();
-    if (!status.ok) {
-      throw new Error(
-        `${status.reason}. This server does not migrate (SCRUM_MIGRATE_ON_OPEN=0). ` +
-          `Run the migrate step first (docker compose up -d, or npm run db:migrate).`
-      );
-    }
-  }
+  // With SCRUM_MIGRATE_ON_OPEN=0, getDb() refuses a missing or out-of-date
+  // database instead of failing later with "no such table".
   getDb();
 } catch (err) {
   process.stderr.write(`[agentscrum-mcp] startup failed: ${err instanceof Error ? err.message : err}\n`);

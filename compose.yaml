@@ -72,8 +72,9 @@ services:
       - ./backups:/backups:ro
 
   # AGENTSCRUM_IMPORT_DIR=/path/to/folder docker compose run --rm import /import/<file>.db
-  # Copies an existing database into an empty agentscrum-data. The source is
-  # opened read-only; point it at a copy, not the live file (see README).
+  # Copies an existing database into an empty agentscrum-data. The folder is
+  # mounted read-only; if SQLite cannot read it in place, the tool reads a
+  # private copy inside the container.
   import:
     <<: *agentscrum
     profiles: ["tools"]
@@ -81,7 +82,7 @@ services:
     command: []
     volumes:
       - agentscrum-data:/data
-      - ${AGENTSCRUM_IMPORT_DIR:-./import}:/import
+      - ${AGENTSCRUM_IMPORT_DIR:-./import}:/import:ro
 
 volumes:
   agentscrum-data:

@@ -6,7 +6,9 @@
 // while it is in use: the -wal file may hold recent writes.
 //
 //   backup  [--out FILE]        snapshot $SCRUM_DB_PATH into FILE
-//                               (default /backups/agentscrum-<UTC time>.db)
+//                               (default /backups/agentscrum-<UTC time>.db).
+//                               The file is self-contained (no -wal), readable from a
+//                               read-only folder.
 //   restore FILE [--to TARGET]  restore FILE into TARGET (default /restore/agentscrum.db)
 //                               and check that row counts match. TARGET must not exist.
 //   import  FILE                copy an existing database (opened read-only) into
@@ -16,6 +18,7 @@
 // Output is plain text on stdout; errors go to stderr with exit code 1.
 import Database from "better-sqlite3";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 function fail(message) {
@@ -30,11 +33,6 @@ function option(args, name) {
   if (!value) fail(`${name} needs a value`);
   args.splice(i, 2);
   return value;
-}
-
-function openReadOnly(file) {
-  if (!fs.existsSync(file)) fail(`no database at ${file}`);
-  return new Database(file, { readonly: true, fileMustExist: true });
 }
 
 function rowCounts(db) {
@@ -57,27 +55,66 @@ function sameCounts(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Snapshot `from` (opened read-only) into a new file `to`. */
-async function copyInto(from, to) {
+/**
+ * Open a source database read-only. A WAL database in a read-only folder
+ * cannot be opened in place when its -shm file is missing, so fall back to a
+ * private temp copy of the file (plus -wal, if present). Returns { db, cleanup }.
+ */
+function openSource(file) {
+  if (!fs.existsSync(file)) fail(`no database at ${file}`);
+  try {
+    const db = new Database(file, { readonly: true, fileMustExist: true });
+    db.prepare("SELECT COUNT(*) FROM sqlite_master").get(); // force the WAL index open
+    return { db, cleanup: () => db.close() };
+  } catch (err) {
+    if (!/readonly|unable to open|SQLITE_CANTOPEN|SQLITE_READONLY/i.test(String(err?.code ?? err?.message))) throw err;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentscrum-src-"));
+    const copy = path.join(dir, path.basename(file));
+    fs.copyFileSync(file, copy);
+    if (fs.existsSync(`${file}-wal`)) fs.copyFileSync(`${file}-wal`, `${copy}-wal`);
+    const db = new Database(copy, { readonly: true, fileMustExist: true });
+    return {
+      db,
+      cleanup: () => {
+        db.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  }
+}
+
+/**
+ * Snapshot `from` into a new file `to` with SQLite's online backup API.
+ * mode "backup": the output is a standalone file in rollback-journal mode, so
+ *   it can be read later from a read-only folder.
+ * mode "database": the output is a working database in WAL mode, and its row
+ *   counts must match the source (the source is not expected to change).
+ * On any failure the partial output is removed.
+ */
+async function copyInto(from, to, mode) {
   if (fs.existsSync(to)) fail(`${to} already exists; refusing to overwrite it`);
   fs.mkdirSync(path.dirname(to), { recursive: true });
-  const src = openReadOnly(from);
+  const src = openSource(from);
+  let ok = false;
   try {
-    await src.backup(to);
+    await src.db.backup(to);
     const dest = new Database(to, { fileMustExist: true });
     try {
       const check = dest.pragma("integrity_check", { simple: true });
-      if (check !== "ok") fail(`integrity check failed on ${to}: ${check}`);
-      dest.pragma("journal_mode = WAL");
-      const before = rowCounts(src);
+      if (check !== "ok") throw new Error(`integrity check failed on ${to}: ${check}`);
+      dest.pragma(mode === "backup" ? "journal_mode = DELETE" : "journal_mode = WAL");
       const after = rowCounts(dest);
-      if (!sameCounts(before, after)) fail(`row counts differ after copying ${from} to ${to}`);
+      if (mode === "database" && !sameCounts(rowCounts(src.db), after)) {
+        throw new Error(`row counts differ after copying ${from} to ${to}`);
+      }
+      ok = true;
       return after;
     } finally {
       dest.close();
     }
   } finally {
-    src.close();
+    src.cleanup();
+    if (!ok) for (const f of [to, `${to}-wal`, `${to}-shm`]) fs.rmSync(f, { force: true });
   }
 }
 
@@ -93,7 +130,7 @@ async function main(argv) {
     case "backup": {
       if (!dbPath) fail("SCRUM_DB_PATH is not set");
       const out = option(args, "--out") ?? `/backups/agentscrum-${stamp()}.db`;
-      const counts = await copyInto(dbPath, out);
+      const counts = await copyInto(dbPath, out, "backup");
       process.stdout.write(`Backed up ${dbPath} to ${out}\n`);
       printCounts(counts);
       return;
@@ -101,7 +138,7 @@ async function main(argv) {
     case "restore": {
       const to = option(args, "--to") ?? "/restore/agentscrum.db";
       const from = args.shift() ?? fail("restore needs a backup file");
-      const counts = await copyInto(from, to);
+      const counts = await copyInto(from, to, "database");
       process.stdout.write(`Restored ${from} into ${to}; row counts match.\n`);
       printCounts(counts);
       return;
@@ -109,18 +146,18 @@ async function main(argv) {
     case "import": {
       if (!dbPath) fail("SCRUM_DB_PATH is not set");
       const from = args.shift() ?? fail("import needs a source database file");
-      const counts = await copyInto(from, dbPath);
+      const counts = await copyInto(from, dbPath, "database");
       process.stdout.write(`Imported ${from} into ${dbPath}; row counts match.\n`);
       printCounts(counts);
       return;
     }
     case "counts": {
       const file = args.shift() ?? dbPath ?? fail("counts needs a database file");
-      const db = openReadOnly(file);
+      const src = openSource(file);
       try {
-        printCounts(rowCounts(db));
+        printCounts(rowCounts(src.db));
       } finally {
-        db.close();
+        src.cleanup();
       }
       return;
     }
@@ -129,4 +166,8 @@ async function main(argv) {
   }
 }
 
-await main(process.argv.slice(2));
+try {
+  await main(process.argv.slice(2));
+} catch (err) {
+  fail(err instanceof Error ? err.message : String(err));
+}
