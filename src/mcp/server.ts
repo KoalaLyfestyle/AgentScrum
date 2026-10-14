@@ -9,6 +9,8 @@
  *   SCRUM_DB_PATH     — SQLite file path (default: <checkout>/agentscrum.db;
  *                       relative paths resolve from the checkout; alias: AGENTSCRUM_DB_PATH)
  *   SCRUM_PROJECT_ID  — default project ID for tools that omit project_id
+ *   SCRUM_MIGRATE_ON_OPEN — 0 to skip migrations at startup (the container sets
+ *                       this; the server then refuses an unmigrated database)
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -62,6 +64,8 @@ warnIfUnsupportedNode();
 // Trigger DB initialization (migrations run inside getDb() on first call).
 // Fail fast with a non-zero exit so the MCP client reports the startup error.
 try {
+  // With SCRUM_MIGRATE_ON_OPEN=0, getDb() refuses a missing or out-of-date
+  // database instead of failing later with "no such table".
   getDb();
 } catch (err) {
   process.stderr.write(`[agentscrum-mcp] startup failed: ${err instanceof Error ? err.message : err}\n`);

@@ -31,3 +31,7 @@ build/
 
 # OS
 .DS_Store
+
+# Container demo
+backups/
+import/

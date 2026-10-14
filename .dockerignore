@@ -1,0 +1,16 @@
+# Keep host builds and dependencies out of the image: the image installs and
+# compiles everything itself.
+node_modules
+dashboard/node_modules
+dist
+dashboard/build
+dashboard/.svelte-kit
+.worktrees
+.git
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/.env
+**/.env.*
+backups
+import
