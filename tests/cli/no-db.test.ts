@@ -93,7 +93,20 @@ test("an explicit project name still wins over the working directory", () => {
   expect(scrum(["beta", "epic", "list"], { env }).stdout).toContain("Bar");
   expect(scrum(["alpha", "epic", "list"], { env }).stdout).not.toContain("Bar");
 
+  // "-h" as an option value is not a help request: the named project must
+  // still be used, not the working directory's.
+  const add = scrum(["beta", "issue", "add", "1", "Baz", "-d", "-h", "--sprint", "1"], { cwd: a, env });
+  expect(add.stderr).toBe("");
+  expect(add.status).toBe(0);
+  expect(scrum(["beta", "issue", "list"], { env }).stdout).toContain("Baz");
+  expect(scrum(["alpha", "issue", "list"], { env }).stdout).not.toContain("Baz");
+
   const unknown = scrum(["nope", "epic", "list"], { cwd: a, env });
   expect(unknown.status).toBe(1);
   expect(unknown.stderr).toContain('Project "nope" not found');
+
+  // A mistyped project or command on its own still fails rather than printing help.
+  const typo = scrum(["statsu"], { cwd: a, env });
+  expect(typo.status).toBe(1);
+  expect(typo.stderr).toContain('Project "statsu" not found');
 });
