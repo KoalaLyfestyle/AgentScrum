@@ -129,3 +129,24 @@ test("npm run db:migrate prints what it renumbered", () => {
   expect(second.status).toBe(0);
   expect(second.stdout).not.toContain("Renumbered");
 });
+
+test("migrate-on-open notes the renumbering on stderr, not stdout", () => {
+  const dbPath = path.join(tmp, "open.db");
+  seededPre0014(dbPath);
+  const run = () =>
+    spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `const db = await import(${JSON.stringify(path.join(root, "dist", "db", "index.js"))}); db.getDb();`,
+      ],
+      { env: { ...process.env, SCRUM_DB_PATH: dbPath, SCRUM_MIGRATE_ON_OPEN: "1" }, encoding: "utf8", timeout: 30_000 }
+    );
+  const first = run();
+  expect(first.status).toBe(0);
+  expect(first.stdout).toBe("");
+  expect(first.stderr).toContain("migration 0014 renumbered 5 duplicate");
+  const second = run();
+  expect(second.stderr).not.toContain("renumbered");
+});

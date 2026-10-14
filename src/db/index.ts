@@ -37,6 +37,10 @@ export function shouldMigrateOnOpen(): boolean {
   return !(value !== undefined && ["0", "false", "no", "off"].includes(value.trim().toLowerCase()));
 }
 
+function hasTable(sqlite: { prepare(sql: string): { get(...args: unknown[]): unknown } }, name: string): boolean {
+  return sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
+}
+
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
 
@@ -57,7 +61,19 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
 
   _db = drizzle(sqlite, { schema });
   if (shouldMigrateOnOpen()) {
+    const hadRenumberLog = hasTable(sqlite, "renumber_log");
     migrate(_db, { migrationsFolder: getMigrationsFolder() });
+    if (!hadRenumberLog && hasTable(sqlite, "renumber_log")) {
+      // Migration 0014 just ran here (#20). Say so on stderr, which keeps MCP
+      // stdout clean, so renumbered keys do not change silently.
+      const { n } = sqlite.prepare("SELECT COUNT(*) AS n FROM renumber_log").get() as { n: number };
+      if (n > 0) {
+        process.stderr.write(
+          `[agentscrum] migration 0014 renumbered ${n} duplicate epic, sprint, or issue number(s) ` +
+            `in ${dbPath}. See the renumber_log table.\n`
+        );
+      }
+    }
   }
   return _db;
 }

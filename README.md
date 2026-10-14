@@ -445,7 +445,7 @@ One setting decides where the SQLite file lives, for the CLI, MCP server, migrat
 - Relative paths resolve from the AgentScrum checkout, not the working directory.
 - If both variables are set to different files, commands stop with an error instead of picking one.
 
-Epic, sprint, and issue numbers are unique per project (issues: per epic). Before version 0.2, two agents writing at the same moment could get the same number. Migration 0014 gives each later duplicate the next free number, prints the changes when run with `npm run db:migrate`, and keeps them in the `renumber_log` table (`sqlite3 agentscrum.db 'SELECT * FROM renumber_log'`). Back up first and check the output if you wrote any keys like `E01-I05` down.
+Epic, sprint, and issue numbers are unique per project (issues: per epic). Before version 0.2, two agents writing at the same moment could get the same number. Migration 0014 gives each later duplicate the next free number and keeps every change in the `renumber_log` table (`sqlite3 agentscrum.db 'SELECT * FROM renumber_log'`). `npm run db:migrate` prints the changes; if the first CLI or MCP call applies the migration instead, it prints a one-line notice on stderr. Renumbering an epic also changes the keys of its issues (`E01-I05` becomes `E03-I05`), though only the epic row is logged. Back up before upgrading if you wrote keys down.
 
 ## Environment Variables
 
