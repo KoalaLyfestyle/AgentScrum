@@ -98,7 +98,12 @@ test("an explicit project name still wins over the working directory", () => {
   const add = scrum(["beta", "issue", "add", "1", "Baz", "-d", "-h", "--sprint", "1"], { cwd: a, env });
   expect(add.stderr).toBe("");
   expect(add.status).toBe(0);
-  expect(scrum(["beta", "issue", "list"], { env }).stdout).toContain("Baz");
+  const issues = JSON.parse(scrum(["beta", "issue", "list", "--json"], { env }).stdout).issues;
+  const betaSprints = JSON.parse(scrum(["beta", "sprint", "list", "--json"], { env }).stdout);
+  const baz = issues.find((i: { title: string }) => i.title === "Baz");
+  expect(baz.description).toBe("-h");
+  // The sprint must be beta's own Sprint 1, not alpha's.
+  expect(betaSprints.map((sp: { id: number }) => sp.id)).toContain(baz.sprintId);
   expect(scrum(["alpha", "issue", "list"], { env }).stdout).not.toContain("Baz");
 
   const unknown = scrum(["nope", "epic", "list"], { cwd: a, env });
