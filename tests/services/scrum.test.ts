@@ -37,6 +37,30 @@ describe("initProject", () => {
   });
 });
 
+describe("findProjectByDirectory", () => {
+  it("picks the closest registered directory when projects are nested (#12)", () => {
+    // Register the outer project first: the old code returned the first prefix match.
+    const { project: outer } = scrum.initProject("outer", "/x");
+    const { project: inner } = scrum.initProject("inner", "/x/projects/inner");
+    expect(scrum.findProjectByDirectory("/x/projects/inner/src")?.id).toBe(inner.id);
+    expect(scrum.findProjectByDirectory("/x/projects/inner")?.id).toBe(inner.id);
+    expect(scrum.findProjectByDirectory("/x/projects/other")?.id).toBe(outer.id);
+    expect(scrum.findProjectByDirectory("/x")?.id).toBe(outer.id);
+  });
+
+  it("matches on whole path segments only", () => {
+    scrum.initProject("foo", "/work/foo");
+    expect(scrum.findProjectByDirectory("/work/foobar")).toBeUndefined();
+    expect(scrum.findProjectByDirectory("/work")).toBeUndefined();
+  });
+
+  it("tolerates a trailing slash in the stored or given directory", () => {
+    const { project } = scrum.initProject("slash", "/srv/app/");
+    expect(scrum.findProjectByDirectory("/srv/app")?.id).toBe(project.id);
+    expect(scrum.findProjectByDirectory("/srv/app/lib/")?.id).toBe(project.id);
+  });
+});
+
 describe("createEpic", () => {
   it("creates an epic linked to a project", () => {
     const { project } = scrum.initProject("ep-test");

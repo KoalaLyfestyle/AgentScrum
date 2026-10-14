@@ -113,8 +113,10 @@ Then register the MCP server as in step 6 and add the CLAUDE.md snippet that `in
 The CLI resolves your project in three ways, in order:
 
 1. **Explicit name or ID:** `scrum myproject issue list`
-2. **CWD auto-detection:** if you `cd` into a project's directory (or a subdirectory), the project is detected automatically — no prefix needed
-3. **Env var fallback:** `SCRUM_PROJECT_ID=1` (useful in scripts)
+2. **Env var:** `SCRUM_PROJECT_ID=1` (useful in scripts)
+3. **CWD auto-detection:** if you `cd` into a project's directory (or a subdirectory), the project is detected automatically — no prefix needed. When projects are nested, the closest one wins.
+
+`--help` and `--version` never open the database.
 
 ```bash
 # All equivalent when inside ~/projects/myproject/

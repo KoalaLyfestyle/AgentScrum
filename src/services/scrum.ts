@@ -3,6 +3,7 @@
  * Used by CLI (Sprint 1) and MCP server (Sprint 2) — no Commander or HTTP here.
  */
 
+import path from "node:path";
 import { eq, and, isNull, or, lt, sql, inArray } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { getCostSource } from "../cost/index.js";
@@ -89,16 +90,22 @@ export function findProject(nameOrId: string): Project {
 
 export function findProjectByDirectory(directory: string): Project | undefined {
   const db = getDb();
-  // Walk up from the given directory checking each level against stored project directories
   const projects = db.select().from(schema.projects).all() as Project[];
-  // Exact match first
-  const exact = projects.find((p) => p.directory === directory);
-  if (exact) return exact;
-  // Then check if the given directory is inside a registered project directory
+  const target = path.resolve(directory);
+  // Pick the closest (longest) registered directory that is the target itself
+  // or one of its ancestors, so a project nested inside another wins.
+  let best: Project | undefined;
+  let bestLength = -1;
   for (const p of projects) {
-    if (p.directory && directory.startsWith(p.directory + "/")) return p;
+    if (!p.directory) continue;
+    const dir = path.resolve(p.directory);
+    const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep;
+    if ((target === dir || target.startsWith(prefix)) && dir.length > bestLength) {
+      best = p;
+      bestLength = dir.length;
+    }
   }
-  return undefined;
+  return best;
 }
 
 export function listProjects(): Project[] {

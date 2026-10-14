@@ -11,7 +11,7 @@ import { registerDod } from "./commands/dod.js";
 import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
 import { registerCost } from "./commands/cost.js";
-import { findProject, findProjectByDirectory } from "../services/scrum.js";
+import { findProject } from "../services/scrum.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 
 // ---------------------------------------------------------------------------
@@ -20,33 +20,41 @@ import { warnIfUnsupportedNode } from "../db/open.js";
 // If argv[2] is not a reserved command or flag, treat it as a project identifier.
 // Resolves it to a project ID and injects SCRUM_PROJECT_ID, then splices it out
 // so Commander sees the subcommand directly.
+//
+// Nothing here opens the database for help or version output. Working-directory
+// detection happens lazily in requireProjectId(), only for commands that need a
+// project.
 // ---------------------------------------------------------------------------
 const RESERVED = new Set([
   "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "retro", "cost", "help",
   "--help", "-h", "--version", "-V",
 ]);
+const INFO_FLAGS = new Set(["--help", "-h", "--version", "-V"]);
+
+/** True when argv after the project name only asks for help or version output. */
+function onlyAsksForInfo(rest: string[]): boolean {
+  if (rest.length === 0 || rest[0] === "help") return true;
+  const end = rest.indexOf("--");
+  return (end === -1 ? rest : rest.slice(0, end)).some((a) => INFO_FLAGS.has(a));
+}
 
 const firstArg = process.argv[2];
 if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
-  // Explicit project name/id passed — resolve it
-  try {
-    const project = findProject(firstArg);
-    process.env["SCRUM_PROJECT_ID"] = String(project.id);
-    process.argv.splice(2, 1); // remove so Commander sees the subcommand
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  }
-} else if (!process.env["SCRUM_PROJECT_ID"]) {
-  // No explicit project and no env var — try CWD detection
-  try {
-    const detected = findProjectByDirectory(process.cwd());
-    if (detected) {
-      process.env["SCRUM_PROJECT_ID"] = String(detected.id);
+  const rest = process.argv.slice(3);
+  if (onlyAsksForInfo(rest)) {
+    // `scrum <project>` alone or `scrum <project> ... --help`: only help is
+    // shown, so drop the project name without looking it up.
+    process.argv.splice(2, 1);
+  } else {
+    // Explicit project name/id passed — resolve it
+    try {
+      const project = findProject(firstArg);
+      process.env["SCRUM_PROJECT_ID"] = String(project.id);
+      process.argv.splice(2, 1); // remove so Commander sees the subcommand
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
     }
-    // If not detected, commands that need a project will show a helpful error at runtime
-  } catch {
-    // DB not set up yet — commands that need a project will handle this
   }
 }
 
