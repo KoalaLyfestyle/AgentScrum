@@ -22,7 +22,7 @@ The pitch is the first two paragraphs, and the agent workflow ("Agent Usage Patt
 
 ## CLI coverage today
 
-A full CLI fallback is not possible yet. The CLI has `status --json`, `issue list --json`, `issue status <id> <status> -r <reason>`, `issue add`, `log <id> <summary>`, and adding acceptance criteria. These MCP steps have no CLI command:
+A full CLI fallback is not possible yet. The CLI has `status --json`, `issue list --json`, `issue status <id> <status> -r <reason>`, `issue add`, `log <id> <summary>`, and `issue ac <id> <text>` (add an acceptance criterion). These MCP steps have no CLI command:
 
 - `scrum_get_work_package` (the session start)
 - `scrum_assign_issue` and `scrum_release_issue` (claim and release)
