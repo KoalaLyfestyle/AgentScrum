@@ -139,14 +139,24 @@ export function listEpics(projectId: number): Epic[] {
 
 export function createEpic(projectId: number, title: string): Epic {
   const db = getDb();
-  const rows = db.select({ maxNum: schema.epics.number }).from(schema.epics)
-    .where(eq(schema.epics.projectId, projectId)).all();
-  const nextNumber = rows.length === 0 ? 1 : Math.max(...rows.map((r) => r.maxNum)) + 1;
-  const epic = db
-    .insert(schema.epics)
-    .values({ projectId, number: nextNumber, title, status: "active", createdAt: now() })
-    .returning()
-    .get();
+  // Allocate the number and insert in one IMMEDIATE transaction, so concurrent
+  // writers to the same project wait for each other instead of reading the
+  // same max (#20). The unique index from migration 0014 backs this up.
+  const epic = db.transaction(
+    (tx) => {
+      const { next } = tx
+        .select({ next: sql<number>`coalesce(max(${schema.epics.number}), 0) + 1` })
+        .from(schema.epics)
+        .where(eq(schema.epics.projectId, projectId))
+        .get()!;
+      return tx
+        .insert(schema.epics)
+        .values({ projectId, number: next, title, status: "active", createdAt: now() })
+        .returning()
+        .get();
+    },
+    { behavior: "immediate" }
+  );
   if (!epic) throw new Error("Failed to create epic");
   return epic as Epic;
 }
@@ -182,18 +192,23 @@ export function updateEpicStatus(epicId: number, status: EpicStatus): Epic {
 
 export function createSprint(projectId: number): Sprint {
   const db = getDb();
-  const existing = db
-    .select()
-    .from(schema.sprints)
-    .where(eq(schema.sprints.projectId, projectId))
-    .all();
-  const nextNumber = existing.length + 1;
-
-  const sprint = db
-    .insert(schema.sprints)
-    .values({ projectId, number: nextNumber, status: "planning" })
-    .returning()
-    .get();
+  // max + 1, not count + 1: a gap in the numbers would otherwise reuse one.
+  // Same IMMEDIATE transaction as createEpic (#20).
+  const sprint = db.transaction(
+    (tx) => {
+      const { next } = tx
+        .select({ next: sql<number>`coalesce(max(${schema.sprints.number}), 0) + 1` })
+        .from(schema.sprints)
+        .where(eq(schema.sprints.projectId, projectId))
+        .get()!;
+      return tx
+        .insert(schema.sprints)
+        .values({ projectId, number: next, status: "planning" })
+        .returning()
+        .get();
+    },
+    { behavior: "immediate" }
+  );
   if (!sprint) throw new Error("Failed to create sprint");
   return sprint as Sprint;
 }
@@ -329,25 +344,33 @@ export function createIssue(
   storyPoints?: number
 ): Issue {
   const db = getDb();
-  const rows = db.select({ maxNum: schema.issues.number }).from(schema.issues)
-    .where(eq(schema.issues.epicId, epicId)).all();
-  const nextNumber = rows.length === 0 ? 1 : Math.max(...rows.map((r) => r.maxNum)) + 1;
-  const issue = db
-    .insert(schema.issues)
-    .values({
-      epicId,
-      sprintId: sprintId ?? null,
-      number: nextNumber,
-      title,
-      description: description ?? null,
-      type,
-      priority,
-      storyPoints: storyPoints ?? null,
-      tokensUsed: 0,
-      createdAt: now(),
-    })
-    .returning()
-    .get();
+  // Same IMMEDIATE transaction as createEpic, scoped to the epic (#20).
+  const issue = db.transaction(
+    (tx) => {
+      const { next } = tx
+        .select({ next: sql<number>`coalesce(max(${schema.issues.number}), 0) + 1` })
+        .from(schema.issues)
+        .where(eq(schema.issues.epicId, epicId))
+        .get()!;
+      return tx
+        .insert(schema.issues)
+        .values({
+          epicId,
+          sprintId: sprintId ?? null,
+          number: next,
+          title,
+          description: description ?? null,
+          type,
+          priority,
+          storyPoints: storyPoints ?? null,
+          tokensUsed: 0,
+          createdAt: now(),
+        })
+        .returning()
+        .get();
+    },
+    { behavior: "immediate" }
+  );
   if (!issue) throw new Error("Failed to create issue");
   return issue as Issue;
 }

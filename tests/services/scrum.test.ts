@@ -71,6 +71,27 @@ describe("createEpic", () => {
   });
 });
 
+describe("numbering (#20)", () => {
+  it("createSprint uses the highest number + 1, so a gap is never reused", () => {
+    const { project } = scrum.initProject("gap");
+    // Sprint 1 exists; add Sprint 3 directly, leaving a gap at 2.
+    db.getDb().insert(db.schema.sprints).values({ projectId: project.id, number: 3, status: "planning" }).run();
+    expect(scrum.createSprint(project.id).number).toBe(4);
+  });
+
+  it("numbers epics per project and issues per epic", () => {
+    const a = scrum.initProject("num-a").project;
+    const b = scrum.initProject("num-b").project;
+    const a1 = scrum.createEpic(a.id, "A1");
+    const a2 = scrum.createEpic(a.id, "A2");
+    const b1 = scrum.createEpic(b.id, "B1");
+    expect([a1.number, a2.number, b1.number]).toEqual([1, 2, 1]);
+    expect(scrum.createIssue(a1.id, null, "x").number).toBe(1);
+    expect(scrum.createIssue(a1.id, null, "y").number).toBe(2);
+    expect(scrum.createIssue(a2.id, null, "z").number).toBe(1);
+  });
+});
+
 describe("createIssue / listIssues", () => {
   it("creates and lists issues in a sprint", () => {
     const { project, sprint } = scrum.initProject("issue-test");

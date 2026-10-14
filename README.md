@@ -12,7 +12,7 @@ The container is the supported install path. The image fixes the Node version an
 git clone https://github.com/KoalaLyfestyle/AgentScrum.git
 cd AgentScrum
 docker compose up -d --build        # builds the image, runs migrate once, starts the dashboard
-curl http://127.0.0.1:5180/healthz  # {"ok":true,"migrations":14}
+curl http://127.0.0.1:5180/healthz  # {"ok":true,"migrations":15}
 ```
 
 Register the MCP server with Claude Code. Each session starts its own short-lived container on the shared database:
@@ -444,6 +444,8 @@ One setting decides where the SQLite file lives, for the CLI, MCP server, migrat
 - Unset: `<checkout>/agentscrum.db`.
 - Relative paths resolve from the AgentScrum checkout, not the working directory.
 - If both variables are set to different files, commands stop with an error instead of picking one.
+
+Epic, sprint, and issue numbers are unique per project (issues: per epic). Before version 0.2, two agents writing at the same moment could get the same number. Migration 0014 gives each later duplicate the next free number, prints the changes when run with `npm run db:migrate`, and keeps them in the `renumber_log` table (`sqlite3 agentscrum.db 'SELECT * FROM renumber_log'`). Back up first and check the output if you wrote any keys like `E01-I05` down.
 
 ## Environment Variables
 
