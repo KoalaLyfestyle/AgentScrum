@@ -48,25 +48,27 @@ export const BUSY_TIMEOUT_MS = 5000;
  * Run pending migrations. When several processes open an old database at
  * once (the first CLI and MCP calls after an upgrade), they can all see the
  * same pending migration; the losers fail with "table already exists" or
- * SQLITE_BUSY once the winner commits. Re-reading the migration state then
- * finds nothing left to do. Returns false when another process applied them.
+ * SQLITE_BUSY once the winner commits. Each failed attempt rolls back, and a
+ * retry reads fresh state. Returns true only if this connection's successful
+ * attempt wrote rows, that is, it applied at least one migration itself.
  */
-function migrateRacingOthers(db: ReturnType<typeof drizzle<typeof schema>>): boolean {
+function migrateRacingOthers(
+  db: ReturnType<typeof drizzle<typeof schema>>,
+  sqlite: { prepare(sql: string): { get(): unknown } }
+): boolean {
   const migrationsFolder = getMigrationsFolder();
-  try {
-    migrate(db, { migrationsFolder });
-    return true;
-  } catch (first) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        migrate(db, { migrationsFolder });
-        return false;
-      } catch {
-        // Another process may still hold the lock; try once more.
-      }
+  const changes = () => (sqlite.prepare("SELECT total_changes() AS n").get() as { n: number }).n;
+  let firstError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const before = changes();
+    try {
+      migrate(db, { migrationsFolder });
+      return changes() > before;
+    } catch (err) {
+      firstError ??= err;
     }
-    throw first;
   }
+  throw firstError;
 }
 
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
@@ -83,17 +85,16 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
       );
     }
   }
-  const sqlite = openSqlite(dbPath);
+  // Wait up to BUSY_TIMEOUT_MS for another process's write lock. It matches
+  // better-sqlite3's default; passing it pins it so it cannot change underneath us.
+  const sqlite = openSqlite(dbPath, { timeout: BUSY_TIMEOUT_MS });
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
-  // Wait up to this long for another process's write lock. better-sqlite3's
-  // default is also 5 s; pinned here so it cannot change underneath us.
-  sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
 
   _db = drizzle(sqlite, { schema });
   if (shouldMigrateOnOpen()) {
     const hadRenumberLog = hasTable(sqlite, "renumber_log");
-    const appliedHere = migrateRacingOthers(_db);
+    const appliedHere = migrateRacingOthers(_db, sqlite);
     if (appliedHere && !hadRenumberLog && hasTable(sqlite, "renumber_log")) {
       // Migration 0014 just ran here (#20). Say so on stderr, which keeps MCP
       // stdout clean, so renumbered keys do not change silently.

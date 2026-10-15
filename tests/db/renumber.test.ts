@@ -156,7 +156,7 @@ test("several processes opening an old database at once all succeed", async () =
   // Every one must end up with a migrated database, not a "table already
   // exists" error. Repeated because the race does not hit every time.
   const { spawn } = await import("child_process");
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 5; round++) {
     const dbPath = path.join(tmp, `race-${round}.db`);
     seededPre0014(dbPath);
     const start = path.join(tmp, `go-${round}`);
@@ -184,6 +184,9 @@ test("several processes opening an old database at once all succeed", async () =
       expect(r.stderr).not.toMatch(/already exists|Error/);
       expect(r.code).toBe(0);
     }
+    // Only the process that applied 0014 reports the renumbering.
+    const notices = results.filter((r) => r.stderr.includes("migration 0014 renumbered")).length;
+    expect(notices).toBe(1);
     const db = new Database(dbPath, { readonly: true });
     expect(db.prepare("SELECT COUNT(*) AS n FROM renumber_log").get()).toEqual({ n: 5 });
     db.close();
