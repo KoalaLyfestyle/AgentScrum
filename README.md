@@ -30,6 +30,8 @@ The skill is a symlink, so `git pull` keeps it current. It breaks if you move th
 
 More: [container.md](docs/container.md) (health check, backup, restore, import, limits) and [setup.md](docs/setup.md) (native install with Node 24, and the dashboard).
 
+To see or undo everything an install changes outside the checkout, read [What installing AgentScrum changes on your machine](docs/setup.md#what-installing-agentscrum-changes-on-your-machine).
+
 ## An agent session
 
 ```json
