@@ -150,3 +150,42 @@ test("migrate-on-open notes the renumbering on stderr, not stdout", () => {
   const second = run();
   expect(second.stderr).not.toContain("renumbered");
 });
+
+test("several processes opening an old database at once all succeed", async () => {
+  // The first CLI or MCP calls after an upgrade can race to apply 0014.
+  // Every one must end up with a migrated database, not a "table already
+  // exists" error. Repeated because the race does not hit every time.
+  const { spawn } = await import("child_process");
+  for (let round = 0; round < 3; round++) {
+    const dbPath = path.join(tmp, `race-${round}.db`);
+    seededPre0014(dbPath);
+    const start = path.join(tmp, `go-${round}`);
+    const code = `
+      import fs from "fs";
+      while (!fs.existsSync(${JSON.stringify(start)})) await new Promise((r) => setTimeout(r, 2));
+      const db = await import(${JSON.stringify(path.join(root, "dist", "db", "index.js"))});
+      db.getDb();
+    `;
+    const runs = Array.from({ length: 6 }, () =>
+      new Promise<{ code: number | null; stderr: string }>((resolve) => {
+        const child = spawn(process.execPath, ["--input-type=module", "-e", code], {
+          env: { ...process.env, SCRUM_DB_PATH: dbPath, SCRUM_MIGRATE_ON_OPEN: "1" },
+          stdio: ["ignore", "ignore", "pipe"],
+        });
+        let stderr = "";
+        child.stderr.on("data", (d) => (stderr += d));
+        child.on("close", (c) => resolve({ code: c, stderr }));
+      })
+    );
+    await new Promise((r) => setTimeout(r, 800));
+    fs.writeFileSync(start, "");
+    const results = await Promise.all(runs);
+    for (const r of results) {
+      expect(r.stderr).not.toMatch(/already exists|Error/);
+      expect(r.code).toBe(0);
+    }
+    const db = new Database(dbPath, { readonly: true });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM renumber_log").get()).toEqual({ n: 5 });
+    db.close();
+  }
+}, 60_000);

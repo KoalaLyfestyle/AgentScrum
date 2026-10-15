@@ -1,6 +1,6 @@
 # Design note: a short README and a home for the agent workflow
 
-Status: waiting for Winston to pick an option. Task: #21. Follow-up work: see "Next step".
+Status: Option A picked in the review of PR #24; built in #25. Task: #21.
 
 ## Problem
 
@@ -81,4 +81,4 @@ Option A. One skill covers the whole loop without repeating itself, loads automa
 
 ## Next step
 
-Pick A, B, or C (or a change to one) in your review of this PR, for example `/changes option A` or the note on your approval. The follow-up task does the move: README under 120 lines, the chosen skill or guide with CLI fallback steps and a debug section, and every removed section linked from the README.
+Winston picked option A in the review of PR #24, with the skill installed at user scope as a symlink (`ln -s "$PWD/skills/agentscrum" ~/.claude/skills/agentscrum`). #25 builds it; the review comment on #25 lists what it must cover. The CLI fallback stays partial until #27 adds the missing commands.

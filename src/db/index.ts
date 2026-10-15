@@ -41,6 +41,34 @@ function hasTable(sqlite: { prepare(sql: string): { get(...args: unknown[]): unk
   return sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
 }
 
+/** How long a connection waits for another process's lock before SQLITE_BUSY. */
+export const BUSY_TIMEOUT_MS = 5000;
+
+/**
+ * Run pending migrations. When several processes open an old database at
+ * once (the first CLI and MCP calls after an upgrade), they can all see the
+ * same pending migration; the losers fail with "table already exists" or
+ * SQLITE_BUSY once the winner commits. Re-reading the migration state then
+ * finds nothing left to do. Returns false when another process applied them.
+ */
+function migrateRacingOthers(db: ReturnType<typeof drizzle<typeof schema>>): boolean {
+  const migrationsFolder = getMigrationsFolder();
+  try {
+    migrate(db, { migrationsFolder });
+    return true;
+  } catch (first) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        migrate(db, { migrationsFolder });
+        return false;
+      } catch {
+        // Another process may still hold the lock; try once more.
+      }
+    }
+    throw first;
+  }
+}
+
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
 
@@ -58,12 +86,15 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   const sqlite = openSqlite(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  // Wait up to this long for another process's write lock. better-sqlite3's
+  // default is also 5 s; pinned here so it cannot change underneath us.
+  sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
 
   _db = drizzle(sqlite, { schema });
   if (shouldMigrateOnOpen()) {
     const hadRenumberLog = hasTable(sqlite, "renumber_log");
-    migrate(_db, { migrationsFolder: getMigrationsFolder() });
-    if (!hadRenumberLog && hasTable(sqlite, "renumber_log")) {
+    const appliedHere = migrateRacingOthers(_db);
+    if (appliedHere && !hadRenumberLog && hasTable(sqlite, "renumber_log")) {
       // Migration 0014 just ran here (#20). Say so on stderr, which keeps MCP
       // stdout clean, so renumbered keys do not change silently.
       const { n } = sqlite.prepare("SELECT COUNT(*) AS n FROM renumber_log").get() as { n: number };
