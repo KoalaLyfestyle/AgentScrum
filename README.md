@@ -55,7 +55,7 @@ Name the project (`scrum myproject issue list`), set `SCRUM_PROJECT_ID`, or run 
 |---|---|
 | [skills/agentscrum/SKILL.md](skills/agentscrum/SKILL.md) | The agent workflow: session loop, conventions, story points, DoD, CLI fallback, debug |
 | [docs/container.md](docs/container.md) | Container install, roles, backup, restore, import, limits |
-| [docs/setup.md](docs/setup.md) | Native install (Node 24), changing Node versions, starting fresh, dashboard |
+| [docs/setup.md](docs/setup.md) | Native install (Node 24), changing Node versions, starting fresh, dashboard, what an install changes and how to undo it |
 | [docs/mcp-tools.md](docs/mcp-tools.md) | All 27 MCP tools |
 | [docs/cli.md](docs/cli.md) | Project selection, issue and epic keys, every CLI command, vault export |
 | [docs/maintenance.md](docs/maintenance.md) | Database location, renumbering, environment variables, development checks |
@@ -86,6 +86,5 @@ Name the project (`scrum myproject issue list`), set `SCRUM_PROJECT_ID`, or run 
 
 ### Near-term
 
-- Multi-agent conflict detection — prevent two agents claiming the same issue simultaneously
 - CLI commands for the steps that are MCP only today (#27)
 - Dashboard build + static export for embedding in other tools

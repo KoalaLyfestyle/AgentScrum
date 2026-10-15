@@ -116,10 +116,11 @@ A first install changes these things. Each has the command that undoes it.
 | Change | Where | Undo |
 |---|---|---|
 | MCP registration | Claude Code's user settings: `claude mcp add agentscrum --scope user ...` (container or native) | `claude mcp remove agentscrum --scope user` |
-| Skill symlink | `~/.claude/skills/agentscrum`, pointing at `<checkout>/skills/agentscrum` | `rm ~/.claude/skills/agentscrum` (removes only the link, not the checkout) |
-| Database, container install | Docker volumes `agentscrum-data` and `agentscrum-restore` | `docker compose down -v` from the checkout, or `docker volume rm agentscrum-data agentscrum-restore`. This deletes your data; take a backup first. |
+| Skill symlink | `~/.claude/skills/agentscrum`, pointing at `<checkout>/skills/agentscrum`. The install also creates `~/.claude/skills/` if it was missing. | `rm ~/.claude/skills/agentscrum` (removes only the link, not the checkout) |
+| Database, container install | Docker volumes `agentscrum-data` and `agentscrum-restore` (the second only after you run `restore`) | `docker compose --profile tools down -v` from the checkout. Without `--profile tools`, `down -v` leaves `agentscrum-restore`. This deletes your data; take a backup first. |
 | Database, native install | `<checkout>/agentscrum.db` with its `-wal` and `-shm` files, or the file `SCRUM_DB_PATH` names | Move or delete the three files. This deletes your data; move them aside as in [Starting fresh](#starting-fresh) if you may need them. |
 | Container image | Docker image `agentscrum:local` | `docker image rm agentscrum:local` |
+| Default Node, native install | `nvm alias default 24` changes nvm's default Node for new shells | `nvm alias default <your previous version>` |
 | Global `scrum` command, native install | `npm link` adds a `scrum` link to npm's global folder | `npm unlink -g agentscrum` |
 | The `scrum init` block | Printed for you to paste into a project's `CLAUDE.md`. AgentScrum never writes to `CLAUDE.md`. | Delete the block from that `CLAUDE.md` if you pasted it. |
 

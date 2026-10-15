@@ -15,7 +15,7 @@ One setting decides where the SQLite file lives, for the CLI, MCP server, migrat
 
 Epic, sprint, and issue numbers are unique per project (issues: per epic). Before version 0.2, two agents writing at the same moment could get the same number. Migration 0014 gives each later duplicate the next free number and keeps every change in the `renumber_log` table. `npm run db:migrate` prints the changes; if the first CLI or MCP call applies the migration instead, it prints a one-line notice on stderr. Renumbering an epic also changes the keys of its issues (`E01-I05` becomes `E03-I05`), though only the epic row is logged. Back up before upgrading if you wrote keys down.
 
-To read `renumber_log` without touching the live file, read a copy. On macOS, `sqlite3 -readonly` fails on a WAL database when the `-wal` and `-shm` files are absent. A `.backup` copy is still in WAL mode, so switch the copy to a rollback journal before reading it:
+To read `renumber_log` without changing your data, read a copy. On macOS, `sqlite3 -readonly` fails on a WAL database when the `-wal` and `-shm` files are absent. A `.backup` copy is still in WAL mode, so switch the copy to a rollback journal before reading it:
 
 ```bash
 sqlite3 agentscrum.db ".backup /tmp/agentscrum-copy.db"

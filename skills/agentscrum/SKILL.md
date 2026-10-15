@@ -7,7 +7,7 @@ description: Workflow for AgentScrum, the Scrum tracker for coding agents. Use w
 
 AgentScrum keeps sprints, epics, issues, acceptance criteria (ACs), and the Definition of Done (DoD) in one SQLite database. Agents use it through the `scrum_*` MCP tools. The `scrum` CLI is the fallback when the MCP server is not connected.
 
-Reference: [MCP tools](../../docs/mcp-tools.md), [CLI](../../docs/cli.md), [setup](../../docs/setup.md), [container](../../docs/container.md), [maintenance](../../docs/maintenance.md).
+Reference pages are in the AgentScrum checkout. If you read this file through the `~/.claude/skills/agentscrum` symlink, resolve the links below against `readlink -f ~/.claude/skills/agentscrum`. Reference: [MCP tools](../../docs/mcp-tools.md), [CLI](../../docs/cli.md), [setup](../../docs/setup.md), [container](../../docs/container.md), [maintenance](../../docs/maintenance.md).
 
 ## Session loop
 
@@ -70,9 +70,9 @@ These steps have no CLI command yet (#27 adds them). Without MCP, **stop and rep
 
 Report what you saw and what you ran. Do not delete or move database files.
 
-- **Runtime check (native).** From the checkout, `npm run doctor` prints the Node version, whether `better-sqlite3` loads (`better-sqlite3: OK` or `FAIL` with a fix), and the database path with its source. Container: `docker compose run --rm cli --version`, or `curl http://127.0.0.1:5180/healthz`.
+- **Runtime check (native).** From the checkout, `npm run doctor` prints the Node version, whether `better-sqlite3` loads (`better-sqlite3: OK` or `FAIL` with a fix), and the database path with its source. Container: `docker run --rm -v agentscrum-data:/data agentscrum:local doctor`, or `curl http://127.0.0.1:5180/healthz`.
 - **`better-sqlite3 could not load in this Node runtime`.** The addon was built for another Node. Run with Node 24 (`.nvmrc`), then `npm rebuild better-sqlite3` with that same Node, and point the MCP registration at that Node's absolute path. See [setup](../../docs/setup.md#changing-node-versions).
-- **The CLI and MCP see different data.** They use different databases. Compare `npm run doctor` with `claude mcp get agentscrum`. Natively, both must use the same `SCRUM_DB_PATH` (or neither). A container MCP server reads the `agentscrum-data` volume, so use `docker compose run --rm cli`, not a host `scrum`.
+- **The CLI and MCP see different data.** They use different databases. Compare `npm run doctor` with `claude mcp get agentscrum`. Natively, both must use the same `SCRUM_DB_PATH` (or neither). A `SCRUM_DB_PATH` set only in `<checkout>/.env` changes the database for the `scrum` CLI only; `npm run doctor` warns about it. Set it in the shell profile instead. A container MCP server reads the `agentscrum-data` volume, so use `docker compose run --rm cli`, not a host `scrum`.
 - **`SCRUM_DB_PATH and AGENTSCRUM_DB_PATH point at different databases`.** Both variables are set to different files. Keep only `SCRUM_DB_PATH`, or set both to the same path.
 - **`Migrations are off here`.** `SCRUM_MIGRATE_ON_OPEN=0` (the container) or the dashboard found a missing or out-of-date database. Run the migrate step: `docker compose up -d` (container) or `npm run db:migrate` (native).
 - **Numbers changed after an upgrade.** Migration 0014 renumbered duplicate epic, sprint, or issue numbers and recorded each change in `renumber_log`. Read it from a copy, as [maintenance](../../docs/maintenance.md#renumbering-in-migration-0014) shows.

@@ -37,7 +37,7 @@ The dashboard is at http://127.0.0.1:5180. Data lives in the Docker volume `agen
 
 A host `scrum` (native install) does not read this volume. It reads `<checkout>/agentscrum.db`. If the MCP server runs in the container, use `docker compose run --rm cli` for the CLI too.
 
-Tested platforms: the native install on macOS arm64 and Linux x86_64, and the container on macOS arm64 (Mac check of PR #22).
+Tested platforms: the native install on macOS arm64 and Linux x86_64, and the container on macOS arm64 with OrbStack ([Mac check of PR #22](https://github.com/KoalaLyfestyle/AgentScrum/pull/22#issuecomment-6163004767)).
 
 ## Roles
 
@@ -106,4 +106,4 @@ docker compose up -d
 
 ## What has been checked
 
-The roles were run natively through `docker/entrypoint.sh` on Linux x86_64 with Node 24.21.0: migrate, two MCP servers with a claim race (one winner), backup, restore, import, and the production dashboard build with `/healthz`. `npm test` covers this (`tests/integration/container-roles.test.ts`). The image build and `docker compose up` were checked on macOS arm64 in the Mac check of PR #22. To run the MCP check against the real container, see `scripts/mcp-smoke.mjs`.
+The roles were run natively through `docker/entrypoint.sh` on Linux x86_64 with Node 24.21.0: migrate, two MCP servers with a claim race (one winner), backup, restore, import, and the production dashboard build with `/healthz`. `npm test` covers this (`tests/integration/container-roles.test.ts`). The image build, `docker compose up`, an MCP round trip from Claude Code, restart, and backup and restore were checked on macOS arm64 with OrbStack in the [Mac check of PR #22](https://github.com/KoalaLyfestyle/AgentScrum/pull/22#issuecomment-6163004767). To run the MCP check against the real container, see `scripts/mcp-smoke.mjs`.
