@@ -37,6 +37,40 @@ export function shouldMigrateOnOpen(): boolean {
   return !(value !== undefined && ["0", "false", "no", "off"].includes(value.trim().toLowerCase()));
 }
 
+function hasTable(sqlite: { prepare(sql: string): { get(...args: unknown[]): unknown } }, name: string): boolean {
+  return sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
+}
+
+/** How long a connection waits for another process's lock before SQLITE_BUSY. */
+export const BUSY_TIMEOUT_MS = 5000;
+
+/**
+ * Run pending migrations. When several processes open an old database at
+ * once (the first CLI and MCP calls after an upgrade), they can all see the
+ * same pending migration; the losers fail with "table already exists" or
+ * SQLITE_BUSY once the winner commits. Each failed attempt rolls back, and a
+ * retry reads fresh state. Returns true only if this connection's successful
+ * attempt wrote rows, that is, it applied at least one migration itself.
+ */
+function migrateRacingOthers(
+  db: ReturnType<typeof drizzle<typeof schema>>,
+  sqlite: { prepare(sql: string): { get(): unknown } }
+): boolean {
+  const migrationsFolder = getMigrationsFolder();
+  const changes = () => (sqlite.prepare("SELECT total_changes() AS n").get() as { n: number }).n;
+  let firstError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const before = changes();
+    try {
+      migrate(db, { migrationsFolder });
+      return changes() > before;
+    } catch (err) {
+      firstError ??= err;
+    }
+  }
+  throw firstError;
+}
+
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
 
@@ -51,13 +85,27 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
       );
     }
   }
-  const sqlite = openSqlite(dbPath);
+  // Wait up to BUSY_TIMEOUT_MS for another process's write lock. It matches
+  // better-sqlite3's default; passing it pins it so it cannot change underneath us.
+  const sqlite = openSqlite(dbPath, { timeout: BUSY_TIMEOUT_MS });
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 
   _db = drizzle(sqlite, { schema });
   if (shouldMigrateOnOpen()) {
-    migrate(_db, { migrationsFolder: getMigrationsFolder() });
+    const hadRenumberLog = hasTable(sqlite, "renumber_log");
+    const appliedHere = migrateRacingOthers(_db, sqlite);
+    if (appliedHere && !hadRenumberLog && hasTable(sqlite, "renumber_log")) {
+      // Migration 0014 just ran here (#20). Say so on stderr, which keeps MCP
+      // stdout clean, so renumbered keys do not change silently.
+      const { n } = sqlite.prepare("SELECT COUNT(*) AS n FROM renumber_log").get() as { n: number };
+      if (n > 0) {
+        process.stderr.write(
+          `[agentscrum] migration 0014 renumbered ${n} duplicate epic, sprint, or issue number(s) ` +
+            `in ${dbPath}. See the renumber_log table.\n`
+        );
+      }
+    }
   }
   return _db;
 }

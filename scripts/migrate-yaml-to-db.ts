@@ -54,7 +54,19 @@ function now(date?: string): string {
   return date ? new Date(date).toISOString() : new Date().toISOString();
 }
 
-function insertOne(table: string, row: Record<string, unknown>): number {
+// Epics are numbered per project and issues per epic; unique indexes enforce it
+// (migration 0014), so give each new row the next number in its scope.
+const NUMBER_SCOPE: Record<string, string> = { epics: "project_id", issues: "epic_id" };
+
+function insertOne(table: string, input: Record<string, unknown>): number {
+  let row = input;
+  const scope = NUMBER_SCOPE[table];
+  if (scope && row["number"] === undefined) {
+    const { next } = sqlite
+      .prepare(`SELECT COALESCE(MAX(number), 0) + 1 AS next FROM ${table} WHERE ${scope} = ?`)
+      .get(row[scope]) as { next: number };
+    row = { ...row, number: next };
+  }
   const cols = Object.keys(row);
   const placeholders = cols.map(() => "?").join(", ");
   const stmt = sqlite.prepare(

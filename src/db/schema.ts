@@ -18,7 +18,10 @@ export const epics = sqliteTable("epics", {
     .notNull()
     .default("active"),
   createdAt: text("created_at").notNull(),
-});
+}, (t) => ({
+  // One number per project (#20). Migration 0014 renumbers old duplicates first.
+  uqEpicNumber: uniqueIndex("uq_epics_project_number").on(t.projectId, t.number),
+}));
 
 export const sprints = sqliteTable("sprints", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
@@ -35,7 +38,9 @@ export const sprints = sqliteTable("sprints", {
   prDescription: text("pr_description"),
   startedAt: text("started_at"),
   closedAt: text("closed_at"),
-});
+}, (t) => ({
+  uqSprintNumber: uniqueIndex("uq_sprints_project_number").on(t.projectId, t.number),
+}));
 
 export const issues = sqliteTable("issues", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
@@ -71,7 +76,9 @@ export const issues = sqliteTable("issues", {
   createdAt: text("created_at").notNull(),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
-});
+}, (t) => ({
+  uqIssueNumber: uniqueIndex("uq_issues_epic_number").on(t.epicId, t.number),
+}));
 
 export const acceptanceCriteria = sqliteTable("acceptance_criteria", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
@@ -149,4 +156,16 @@ export const lessons = sqliteTable("lessons", {
   dontRepeat: text("dont_repeat").notNull(), // concrete instruction for agents
   tags: text("tags"), // comma-separated, e.g. "db,drizzle,migration"
   createdAt: text("created_at").notNull(),
+});
+
+// Rows that migration 0014 renumbered so the unique number indexes could be
+// created (#20). One row per change; empty on databases that had no duplicates.
+export const renumberLog = sqliteTable("renumber_log", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  tableName: text("table_name").notNull(), // "epics" | "sprints" | "issues"
+  rowId: integer("row_id", { mode: "number" }).notNull(),
+  scopeId: integer("scope_id", { mode: "number" }).notNull(), // project_id, or epic_id for issues
+  oldNumber: integer("old_number", { mode: "number" }).notNull(),
+  newNumber: integer("new_number", { mode: "number" }).notNull(),
+  renumberedAt: text("renumbered_at").notNull(),
 });

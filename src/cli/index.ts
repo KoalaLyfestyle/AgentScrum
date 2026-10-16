@@ -11,42 +11,48 @@ import { registerDod } from "./commands/dod.js";
 import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
 import { registerCost } from "./commands/cost.js";
-import { findProject, findProjectByDirectory } from "../services/scrum.js";
+import { findProject } from "../services/scrum.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 
 // ---------------------------------------------------------------------------
 // Project resolution
 // Supports: scrum <project-name-or-id> <command> [args]
 // If argv[2] is not a reserved command or flag, treat it as a project identifier.
-// Resolves it to a project ID and injects SCRUM_PROJECT_ID, then splices it out
-// so Commander sees the subcommand directly.
+// Splices it out so Commander sees the subcommand directly, then resolves it to
+// a project ID and injects SCRUM_PROJECT_ID before the command's action runs.
+//
+// Nothing here opens the database for help or version output. Working-directory
+// detection happens lazily in requireProjectId(), only for commands that need a
+// project.
 // ---------------------------------------------------------------------------
 const RESERVED = new Set([
   "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "retro", "cost", "help",
   "--help", "-h", "--version", "-V",
 ]);
 
+// The explicit project, if one was named. It is looked up in a preAction hook
+// (below), so help and version output, which exit before any action runs,
+// never open the database.
+let explicitProject: string | undefined;
+
 const firstArg = process.argv[2];
 if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
-  // Explicit project name/id passed — resolve it
+  process.argv.splice(2, 1); // remove so Commander sees the subcommand
+  if (process.argv.length === 2) {
+    // `scrum <name>` alone: check it now, so a typo fails instead of printing help.
+    resolveExplicitProject(firstArg);
+  } else {
+    explicitProject = firstArg;
+  }
+}
+
+function resolveExplicitProject(nameOrId: string): void {
   try {
-    const project = findProject(firstArg);
+    const project = findProject(nameOrId);
     process.env["SCRUM_PROJECT_ID"] = String(project.id);
-    process.argv.splice(2, 1); // remove so Commander sees the subcommand
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
-  }
-} else if (!process.env["SCRUM_PROJECT_ID"]) {
-  // No explicit project and no env var — try CWD detection
-  try {
-    const detected = findProjectByDirectory(process.cwd());
-    if (detected) {
-      process.env["SCRUM_PROJECT_ID"] = String(detected.id);
-    }
-    // If not detected, commands that need a project will show a helpful error at runtime
-  } catch {
-    // DB not set up yet — commands that need a project will handle this
   }
 }
 
@@ -85,7 +91,10 @@ program
     ].join("\n")
   )
   .version("0.2.0")
-  .addHelpCommand("help [command]", "Display help for a command");
+  .addHelpCommand("help [command]", "Display help for a command")
+  .hook("preAction", () => {
+    if (explicitProject !== undefined) resolveExplicitProject(explicitProject);
+  });
 
 registerInit(program);
 registerProject(program);
