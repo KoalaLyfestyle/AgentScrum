@@ -26,7 +26,7 @@ docker compose run --rm cli init myproject                         # create your
 
 The dashboard is at http://127.0.0.1:5180. Data lives in the Docker volume `agentscrum-data`. Run the CLI from the checkout as `docker compose run --rm cli myproject <command>`, always naming the project.
 
-The skill is a symlink, so `git pull` keeps it current. It breaks if you move the checkout. To remove it: `rm ~/.claude/skills/agentscrum`.
+If `~/.claude/skills/agentscrum` already exists, remove it first. The skill is a symlink, so `git pull` keeps it current. It breaks if you move the checkout. To remove it: `rm ~/.claude/skills/agentscrum`.
 
 More: [container.md](docs/container.md) (health check, backup, restore, import, limits) and [setup.md](docs/setup.md) (native install with Node 24, and the dashboard).
 

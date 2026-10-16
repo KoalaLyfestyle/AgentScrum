@@ -39,7 +39,8 @@ claude mcp add agentscrum --scope user \
   -e SCRUM_DB_PATH="$PWD/agentscrum.db" \
   -- "$(nvm which 24.21.0)" "$PWD/dist/mcp/server.js"
 
-# 7. Install the agent workflow skill (user scope, as a symlink), from the checkout
+# 7. Install the agent workflow skill (user scope, as a symlink), from the checkout.
+#    If ~/.claude/skills/agentscrum already exists, remove it first.
 mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/agentscrum" ~/.claude/skills/agentscrum
 
@@ -51,7 +52,7 @@ scrum init myproject         # interactive DoD prompt
 
 `scrum init` records the current folder as the project's folder. Later, running `scrum` anywhere inside that folder picks the project automatically, so run `init` from the project you are tracking, not from the AgentScrum checkout.
 
-The skill is a symlink, so it stays current after `git pull`. It breaks if you move or delete the checkout; run the `ln -s` line again from the new place. To remove it: `rm ~/.claude/skills/agentscrum`.
+The skill is a symlink, so it stays current after `git pull`. It breaks if you move or delete the checkout. To re-link from the new place, remove the old link first: `rm ~/.claude/skills/agentscrum && ln -s "$PWD/skills/agentscrum" ~/.claude/skills/agentscrum`. To remove it: `rm ~/.claude/skills/agentscrum`.
 
 The CLI, the MCP server, `npm run db:migrate`, and the dashboard must use the same database. The simplest setup is the default above. If you want another path, set `SCRUM_DB_PATH` in your shell profile and pass the same absolute path to `claude mcp add`. Avoid setting it only in `<checkout>/.env`: the `scrum` CLI reads that file, but `db:migrate`, the dashboard, and the MCP server do not. `npm run doctor` prints the path from your shell and warns when `.env` gives the CLI a different one; compare it with the `SCRUM_DB_PATH` in your MCP registration (`claude mcp get agentscrum`).
 

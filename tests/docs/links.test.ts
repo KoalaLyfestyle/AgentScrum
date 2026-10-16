@@ -2,6 +2,7 @@
 // The README now points to these pages for everything it used to hold, so a
 // broken link or anchor means content a reader cannot reach.
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -61,6 +62,38 @@ describe("documentation links", () => {
       }
     }
     expect(broken).toEqual([]);
+  });
+
+  it("the skill's links resolve where the skill is installed", () => {
+    // Every documented install puts the skill at ~/.claude/skills/agentscrum as
+    // a symlink. Claude Code resolves ".." in a link without following that
+    // symlink, so check the links from the installed path, not from the repo.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "agentscrum-skill-"));
+    try {
+      const installed = path.join(home, ".claude", "skills", "agentscrum");
+      fs.mkdirSync(path.dirname(installed), { recursive: true });
+      fs.symlinkSync(path.join(root, "skills", "agentscrum"), installed);
+      const broken: string[] = [];
+      for (const link of links(path.join(installed, "SKILL.md"))) {
+        if (/^[a-z]+:/i.test(link)) continue;
+        if (link.startsWith("../")) {
+          broken.push(`${link} (leaves the skill folder)`);
+          continue;
+        }
+        const [target, anchor] = link.split("#");
+        const dest = target ? path.resolve(installed, target) : path.join(installed, "SKILL.md");
+        if (!fs.existsSync(dest)) {
+          broken.push(`${link} (no such file at ${dest})`);
+          continue;
+        }
+        if (anchor && dest.endsWith(".md") && !anchors(dest).has(anchor)) {
+          broken.push(`${link} (no such heading)`);
+        }
+      }
+      expect(broken).toEqual([]);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("README stays under 120 lines", () => {

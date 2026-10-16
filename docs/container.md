@@ -17,14 +17,14 @@ Register the MCP server with Claude Code, from the checkout. Each session starts
 claude mcp add agentscrum --scope user -- "$PWD/bin/agentscrum-mcp"
 ```
 
-Install the agent workflow skill at user scope, as a symlink, from the checkout. It stays current after `git pull`:
+Install the agent workflow skill at user scope, as a symlink, from the checkout. It stays current after `git pull`. If `~/.claude/skills/agentscrum` already exists, remove it first:
 
 ```bash
 mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/agentscrum" ~/.claude/skills/agentscrum
 ```
 
-The link breaks if you move or delete the checkout; run the `ln -s` line again from the new place. To remove the skill: `rm ~/.claude/skills/agentscrum`.
+The link breaks if you move or delete the checkout. To re-link from the new place, remove the old link first: `rm ~/.claude/skills/agentscrum && ln -s "$PWD/skills/agentscrum" ~/.claude/skills/agentscrum`. To remove the skill: `rm ~/.claude/skills/agentscrum`.
 
 Use the CLI through Compose, from the checkout. Always name the project: the container cannot see your working directory, so it cannot detect the project from it.
 
