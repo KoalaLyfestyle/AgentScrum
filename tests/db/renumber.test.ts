@@ -40,6 +40,8 @@ function seededPre0014(dbPath: string): void {
     JSON.stringify({ ...journal, entries: journal.entries.slice(0, idx) })
   );
   const db = new Database(dbPath);
+  // Real old databases are already in WAL mode (the old code always set it), so match that.
+  db.pragma("journal_mode = WAL");
   migrate(drizzle(db), { migrationsFolder: partial });
   const t = "2026-10-14T00:00:00.000Z";
   db.exec(`
