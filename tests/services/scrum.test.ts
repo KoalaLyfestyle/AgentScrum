@@ -37,6 +37,30 @@ describe("initProject", () => {
   });
 });
 
+describe("findProjectByDirectory", () => {
+  it("picks the closest registered directory when projects are nested (#12)", () => {
+    // Register the outer project first: the old code returned the first prefix match.
+    const { project: outer } = scrum.initProject("outer", "/x");
+    const { project: inner } = scrum.initProject("inner", "/x/projects/inner");
+    expect(scrum.findProjectByDirectory("/x/projects/inner/src")?.id).toBe(inner.id);
+    expect(scrum.findProjectByDirectory("/x/projects/inner")?.id).toBe(inner.id);
+    expect(scrum.findProjectByDirectory("/x/projects/other")?.id).toBe(outer.id);
+    expect(scrum.findProjectByDirectory("/x")?.id).toBe(outer.id);
+  });
+
+  it("matches on whole path segments only", () => {
+    scrum.initProject("foo", "/work/foo");
+    expect(scrum.findProjectByDirectory("/work/foobar")).toBeUndefined();
+    expect(scrum.findProjectByDirectory("/work")).toBeUndefined();
+  });
+
+  it("tolerates a trailing slash in the stored or given directory", () => {
+    const { project } = scrum.initProject("slash", "/srv/app/");
+    expect(scrum.findProjectByDirectory("/srv/app")?.id).toBe(project.id);
+    expect(scrum.findProjectByDirectory("/srv/app/lib/")?.id).toBe(project.id);
+  });
+});
+
 describe("createEpic", () => {
   it("creates an epic linked to a project", () => {
     const { project } = scrum.initProject("ep-test");
@@ -44,6 +68,27 @@ describe("createEpic", () => {
     expect(epic.title).toBe("My Epic");
     expect(epic.projectId).toBe(project.id);
     expect(epic.status).toBe("active");
+  });
+});
+
+describe("numbering (#20)", () => {
+  it("createSprint uses the highest number + 1, so a gap is never reused", () => {
+    const { project } = scrum.initProject("gap");
+    // Sprint 1 exists; add Sprint 3 directly, leaving a gap at 2.
+    db.getDb().insert(db.schema.sprints).values({ projectId: project.id, number: 3, status: "planning" }).run();
+    expect(scrum.createSprint(project.id).number).toBe(4);
+  });
+
+  it("numbers epics per project and issues per epic", () => {
+    const a = scrum.initProject("num-a").project;
+    const b = scrum.initProject("num-b").project;
+    const a1 = scrum.createEpic(a.id, "A1");
+    const a2 = scrum.createEpic(a.id, "A2");
+    const b1 = scrum.createEpic(b.id, "B1");
+    expect([a1.number, a2.number, b1.number]).toEqual([1, 2, 1]);
+    expect(scrum.createIssue(a1.id, null, "x").number).toBe(1);
+    expect(scrum.createIssue(a1.id, null, "y").number).toBe(2);
+    expect(scrum.createIssue(a2.id, null, "z").number).toBe(1);
   });
 });
 

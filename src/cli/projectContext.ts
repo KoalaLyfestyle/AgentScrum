@@ -1,12 +1,28 @@
+import { findProjectByDirectory } from "../services/scrum.js";
+
 /**
  * Shared helper for resolving the current project ID from env.
- * The env var is injected by index.ts from either:
- *   1. Explicit project arg:  scrum <project-name> <command>
- *   2. CWD detection:         scrum <command>  (if run inside a registered project dir)
- *   3. Env var:               SCRUM_PROJECT_ID=1 scrum <command>
+ * Sources, in order:
+ *   1. Explicit project arg:  scrum <project-name> <command>  (index.ts sets the env var)
+ *   2. Env var:               SCRUM_PROJECT_ID=1 scrum <command>
+ *   3. CWD detection:         scrum <command>  (closest registered project dir)
+ *
+ * CWD detection runs here, not at startup, so commands that need no project
+ * (help, version, init, project list) never open the database for it.
  */
 export function requireProjectId(): number {
-  const raw = process.env["SCRUM_PROJECT_ID"];
+  let raw = process.env["SCRUM_PROJECT_ID"];
+  if (!raw) {
+    try {
+      const detected = findProjectByDirectory(process.cwd());
+      if (detected) {
+        raw = String(detected.id);
+        process.env["SCRUM_PROJECT_ID"] = raw;
+      }
+    } catch {
+      // DB not set up yet — fall through to the helpful error below
+    }
+  }
   if (!raw) {
     console.error(
       [
