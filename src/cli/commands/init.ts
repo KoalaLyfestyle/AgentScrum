@@ -2,6 +2,7 @@ import readline from "readline";
 import type { Command } from "commander";
 import { initProject, setDod } from "../../services/scrum.js";
 import { getDbPath } from "../../db/index.js";
+import { projectNameProblem } from "../reserved.js";
 
 async function promptDod(): Promise<string[]> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -31,6 +32,8 @@ export function registerInit(program: Command): void {
     .description("Initialize a new AgentScrum project with Sprint 1")
     .action(async (projectName: string) => {
       try {
+        const problem = projectNameProblem(projectName);
+        if (problem) throw new Error(problem);
         const { project, sprint } = initProject(projectName, process.cwd());
         console.log(`Project created: ${project.name} (id: ${project.id})`);
         console.log(`Sprint 1 created (id: ${sprint.id}, status: ${sprint.status})`);

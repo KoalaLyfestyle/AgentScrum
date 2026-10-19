@@ -15,11 +15,13 @@ import fs from "fs";
 import { findProject } from "../services/scrum.js";
 import { getDbPath } from "../db/index.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
+import { isReservedWord } from "./reserved.js";
 
 // ---------------------------------------------------------------------------
 // Project resolution
 // Supports: scrum <project-name-or-id> <command> [args]
-// If argv[2] is not a reserved command or flag, treat it as a project identifier.
+// If argv[2] is not a reserved command or flag (./reserved.ts), treat it as a
+// project identifier.
 // Splices it out so Commander sees the subcommand directly, then resolves it to
 // a project ID and injects SCRUM_PROJECT_ID before the command's action runs.
 //
@@ -27,10 +29,6 @@ import { warnIfUnsupportedNode } from "../db/open.js";
 // detection happens lazily in requireProjectId(), only for commands that need a
 // project.
 // ---------------------------------------------------------------------------
-const RESERVED = new Set([
-  "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "retro", "cost", "help",
-  "--help", "-h", "--version", "-V",
-]);
 
 // The explicit project, if one was named. It is looked up in a preAction hook
 // (below), so help and version output, which exit before any action runs,
@@ -38,7 +36,7 @@ const RESERVED = new Set([
 let explicitProject: string | undefined;
 
 const firstArg = process.argv[2];
-if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
+if (firstArg && !isReservedWord(firstArg) && !firstArg.startsWith("-")) {
   process.argv.splice(2, 1); // remove so Commander sees the subcommand
   if (process.argv.length === 2) {
     // `scrum <name>` alone: check it now, so a typo fails instead of printing help.

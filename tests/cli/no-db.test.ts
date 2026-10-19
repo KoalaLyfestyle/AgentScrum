@@ -127,3 +127,14 @@ test("a named project with no database file fails and creates nothing (#30)", ()
     }
   }
 });
+
+test.each([["status"], ["issue"], ["help"], ["-x"]])(
+  "scrum init refuses the project name %s and creates nothing (#31)",
+  (name) => {
+    const db = path.join(tmp, "reserved.db");
+    const result = scrum(["init", "--", name], { env: { SCRUM_DB_PATH: db } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`"${name}"`);
+    expect(fs.existsSync(db)).toBe(false);
+  }
+);
