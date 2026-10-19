@@ -11,7 +11,7 @@ Several AI coding agents on one backlog need a shared sprint board: who owns whi
 
 ![AgentScrum dashboard overview with an active sprint: 6 issues, 3 done, 138k tokens logged](docs/media/dashboard-overview.jpg)
 
-![Sprint board while two agents claim the same issue at once: agent-a wins and agent-b is refused (shown in the caption, from the MCP response), then agent-a moves the issue to Review and Done](docs/media/agent-claims-issue.gif)
+![Sprint board while two agents claim the same issue at once: one agent wins and the other is refused (shown in the caption, from the MCP response), then the winner moves the issue to Review and Done](docs/media/agent-claims-issue.gif)
 
 Demo data, seeded through the real MCP server by [`docs/media/capture_demo.py`](docs/media/capture_demo.py). The dashboard does not push updates; each GIF frame is a page reload after an agent step.
 
@@ -78,7 +78,7 @@ The business logic lives in `src/services/scrum.ts`. The MCP server and the CLI 
 
 ## Who built what
 
-Winston designed AgentScrum and directed sprints 1 to 7 (the data model, MCP server, CLI, claims, cost tracking, and the dashboard) in April and May 2026, pair-programming with Claude Code: most of those commits are co-authored by Claude. Since October 2026, AI coding agents have written fixes, the container, and these docs from his issues, and he reviews each pull request before it merges.
+Winston designed AgentScrum and directed sprints 1 to 7 (the data model, MCP server, CLI, claims, cost tracking, and the dashboard) in April 2026, with fixes in May, working with Claude (Sonnet 4.6): most of those commits are co-authored by Claude. Since October 2026, AI coding agents have written fixes, the container, and these docs from his issues, and he reviews each pull request before it merges.
 
 ## Documentation
 
