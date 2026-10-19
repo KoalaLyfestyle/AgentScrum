@@ -65,10 +65,10 @@ The business logic lives in `src/services/scrum.ts`. The MCP server and the CLI 
 
 ## Results and limits
 
-- **Tests:** 12 Jest suites and 135 tests for the core, plus 16 Vitest tests for the dashboard. On 19 October 2026, on Node 22 (this cloud run had no Node 24): 133 core tests pass, and the 2 failures in `tests/cli/no-db.test.ts` expect empty stderr but get the CLI's warning about running on Node 22. All 16 dashboard tests pass.
+- **Tests:** 13 Jest suites and 140 tests for the core, plus 16 Vitest tests for the dashboard. On 19 October 2026, on Node 22 (this cloud run had no Node 24): 138 core tests pass, and the 2 failures in `tests/cli/no-db.test.ts` expect empty stderr but get the CLI's warning about running on Node 22. All 16 dashboard tests pass.
 - **One owner per issue:** `assignIssue` in `src/services/scrum.ts` claims with one conditional `UPDATE ... RETURNING`. `tests/integration/container-roles.test.ts` races two MCP server processes three times and expects exactly one winner each time. The demo above runs the same race between two MCP server processes. A claim older than 30 minutes can be taken over, so a crashed agent does not hold an issue forever.
 - **What the container demo proves:** the image migrates a fresh volume once, the dashboard passes its health check, and separate MCP containers share one database with clean stdout. On 19 October 2026 the image could not be built in this cloud run (base image pull blocked), so the container results are historical, from PR #22.
-- **Limits:** one machine and one SQLite file; no auth, so keep the dashboard on `127.0.0.1`. The dashboard's Live view shows invented activity and is a design mock. A brand-new database opened by several processes at once can still fail its first WAL switch (#33).
+- **Limits:** one machine and one SQLite file; no auth, so keep the dashboard on `127.0.0.1`. The dashboard's Live view shows invented activity and is a design mock.
 
 ## Design note
 
