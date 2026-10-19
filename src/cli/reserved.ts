@@ -18,6 +18,9 @@ export function projectNameProblem(name: string): string | null {
   if (RESERVED_COMMANDS.has(name)) {
     return `"${name}" is a scrum command, so 'scrum ${name} ...' would run the command, not open the project. Pick another name.`;
   }
+  if (/^\d+$/.test(name)) {
+    return `"${name}" is all digits, so 'scrum ${name} ...' would look up the project with id ${name}. Add a letter.`;
+  }
   if (name.startsWith("-")) {
     return `"${name}" starts with "-", so the CLI would read it as an option. Pick a name that starts with a letter or digit.`;
   }

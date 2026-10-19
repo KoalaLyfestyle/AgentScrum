@@ -99,6 +99,7 @@ test("sprint start, create, and close move sprints through their states", () => 
   expect(created).toMatchObject({ number: 2, status: "planning" });
   expect(json("demo", "sprint", "close", "1")).toMatchObject({ number: 1, status: "closed" });
   expect(scrum("demo", "sprint", "start", "9").status).toBe(1);
+  expect(scrum("demo", "sprint", "close", "1x").stderr).toContain("sprint number must be a whole number");
 });
 
 test("work gives the same package as scrum_get_work_package", async () => {
@@ -119,6 +120,7 @@ test("issue claim lets one agent hold an issue until it releases it", () => {
   const second = scrum("demo", "issue", "claim", id, "--by", "agent-b");
   expect(second.status).toBe(1);
   expect(second.stderr).toContain("already claimed");
+  expect(scrum("demo", "issue", "claim", "abc", "--by", "agent-a").stderr).toContain("issue id must be a whole number");
   const wrongRelease = scrum("demo", "issue", "release", id, "--by", "agent-b");
   expect(wrongRelease.status).toBe(1);
   expect(json("demo", "issue", "release", id, "--by", "agent-a")).toMatchObject({ id: issueId, claimedBy: null });
@@ -136,8 +138,9 @@ test("ac-done, status, log, and show work together, and show matches scrum_get_i
   const ac = json("demo", "issue", "ac-done", String(before.acs[0].id));
   expect(ac).toMatchObject({ id: before.acs[0].id, completed: true });
   expect(json("demo", "issue", "status", id, "in_progress")).toMatchObject({ id: issueId, status: "in_progress" });
-  const session = json("demo", "log", id, "Masked the card", "--tokens", "1200", "--auditor", "pass");
-  expect(session).toMatchObject({ issueId, summary: "Masked the card", tokensUsed: 1200, auditor: "pass" });
+  const logged = json("demo", "log", id, "Masked the card", "--tokens", "1200", "--auditor", "pass");
+  expect(logged.session).toMatchObject({ issueId, summary: "Masked the card", tokensUsed: 1200, auditor: "pass" });
+  expect(logged.issue_tokens_total).toBe(1200);
 
   const fromCli = json("demo", "issue", "show", id);
   expect(fromCli).toEqual(await mcpCall("scrum_get_issue_detail", { issue_id: issueId }));

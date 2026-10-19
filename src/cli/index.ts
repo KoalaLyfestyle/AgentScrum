@@ -12,9 +12,8 @@ import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
 import { registerCost } from "./commands/cost.js";
 import { registerWork, registerSession, registerDecision, registerLesson } from "./commands/workflow.js";
-import fs from "fs";
 import { findProject } from "../services/scrum.js";
-import { getDbPath, shouldMigrateOnOpen } from "../db/index.js";
+import { setCreateOnOpen } from "../db/index.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 import { isReservedWord } from "./reserved.js";
 
@@ -37,6 +36,10 @@ import { isReservedWord } from "./reserved.js";
 let explicitProject: string | undefined;
 
 const firstArg = process.argv[2];
+
+// Only `scrum init` may create a database (#30). Every other command fails on a
+// missing file instead of creating an empty one (see setCreateOnOpen).
+if (firstArg !== "init") setCreateOnOpen(false);
 if (firstArg && !isReservedWord(firstArg) && !firstArg.startsWith("-")) {
   process.argv.splice(2, 1); // remove so Commander sees the subcommand
   if (process.argv.length === 2) {
@@ -48,15 +51,7 @@ if (firstArg && !isReservedWord(firstArg) && !firstArg.startsWith("-")) {
 }
 
 function resolveExplicitProject(nameOrId: string): void {
-  // Looking up a project must not create a database: only `scrum init` may (#30).
-  // Otherwise a typo in SCRUM_DB_PATH leaves an empty, migrated file behind.
-  // With migrations off (the container), getDb() already refuses, with advice
-  // about the migrate step.
   try {
-    const dbPath = getDbPath();
-    if (shouldMigrateOnOpen() && !fs.existsSync(dbPath)) {
-      throw new Error(`No database at ${dbPath}. Run 'scrum init <name>' to create one, or check SCRUM_DB_PATH.`);
-    }
     const project = findProject(nameOrId);
     process.env["SCRUM_PROJECT_ID"] = String(project.id);
   } catch (err) {

@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { logSession } from "../../services/scrum.js";
+import { logSession, getIssueDetail } from "../../services/scrum.js";
 import type { AuditorVerdict } from "../../schema/types.js";
 
 const VERDICTS: AuditorVerdict[] = ["pass", "fail", "skipped"];
@@ -38,7 +38,9 @@ export function registerLog(program: Command): void {
 
           const session = await logSession(parseInt(issueId, 10), summary, tokens, auditor, opts.model);
           if (opts.json) {
-            console.log(JSON.stringify(session, null, 2));
+            // The same shape as scrum_log_session.
+            const issueTokensTotal = getIssueDetail(session.issueId).tokensUsed;
+            console.log(JSON.stringify({ session, issue_tokens_total: issueTokensTotal }, null, 2));
             return;
           }
           console.log(`Session logged for issue #${session.issueId} on ${session.createdAt.slice(0, 10)}`);

@@ -17,6 +17,7 @@ import {
   epicKey,
   issueKey,
 } from "../../services/scrum.js";
+import { parseCount } from "./workflow.js";
 import type { Issue, IssueDetail, IssueStatus, IssueType, Priority } from "../../schema/types.js";
 import { requireProjectId } from "../projectContext.js";
 
@@ -290,7 +291,7 @@ export function registerIssue(program: Command): void {
     .option("--json", "Output the claimed issue as JSON")
     .action((issueId: string, opts: { by: string; session?: string; json?: boolean }) => {
       try {
-        const claimed = assignIssue(parseInt(issueId, 10), opts.by, opts.session);
+        const claimed = assignIssue(parseCount(issueId, "issue id", 1), opts.by, opts.session);
         if (opts.json) {
           console.log(JSON.stringify(claimed, null, 2));
           return;
@@ -309,7 +310,7 @@ export function registerIssue(program: Command): void {
     .option("--json", "Output the released issue as JSON")
     .action((issueId: string, opts: { by?: string; json?: boolean }) => {
       try {
-        const released = releaseIssue(parseInt(issueId, 10), opts.by);
+        const released = releaseIssue(parseCount(issueId, "issue id", 1), opts.by);
         if (opts.json) {
           console.log(JSON.stringify(released, null, 2));
           return;
@@ -327,7 +328,7 @@ export function registerIssue(program: Command): void {
     .option("--json", "Output the criterion as JSON")
     .action((acId: string, opts: { json?: boolean }) => {
       try {
-        const ac = completeAc(parseInt(acId, 10));
+        const ac = completeAc(parseCount(acId, "AC id", 1));
         if (opts.json) {
           console.log(JSON.stringify(ac, null, 2));
           return;

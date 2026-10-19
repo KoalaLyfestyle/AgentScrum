@@ -18,6 +18,18 @@ export function getDbPath(): string {
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let migrateOnOpen: boolean | null = null;
 
+let createOnOpen = true;
+
+/**
+ * Whether getDb() may create a missing database file. The CLI turns this off
+ * for every command except `scrum init`, so a typo in the database path fails
+ * instead of leaving an empty, migrated file behind (#30). Call before the
+ * first getDb(). The MCP server and `npm run db:migrate` keep the default.
+ */
+export function setCreateOnOpen(enabled: boolean): void {
+  createOnOpen = enabled;
+}
+
 /** Env setting: SCRUM_MIGRATE_ON_OPEN=0 turns off migrate-on-open (the container sets it). */
 export const MIGRATE_ON_OPEN_ENV = "SCRUM_MIGRATE_ON_OPEN";
 
@@ -84,6 +96,14 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
           `Run the migrate step first: docker compose up -d, or npm run db:migrate.`
       );
     }
+  }
+  if (!createOnOpen && dbPath !== ":memory:" && !fs.existsSync(dbPath)) {
+    const variable = process.env["SCRUM_DB_PATH"]?.trim()
+      ? "SCRUM_DB_PATH"
+      : process.env["AGENTSCRUM_DB_PATH"]?.trim()
+        ? "AGENTSCRUM_DB_PATH"
+        : "SCRUM_DB_PATH (not set; this is the default path)";
+    throw new Error(`No database at ${dbPath}. Run 'scrum init <name>' to create one, or check ${variable}.`);
   }
   // Wait up to BUSY_TIMEOUT_MS for another process's write lock. It matches
   // better-sqlite3's default; passing it pins it so it cannot change underneath us.

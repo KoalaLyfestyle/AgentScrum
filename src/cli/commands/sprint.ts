@@ -12,6 +12,7 @@ import {
   closeSprint,
 } from "../../services/scrum.js";
 import type { Sprint } from "../../schema/types.js";
+import { parseCount } from "./workflow.js";
 import { requireProjectId } from "../projectContext.js";
 
 export function registerSprint(program: Command): void {
@@ -222,9 +223,7 @@ export function registerSprint(program: Command): void {
   }
 
   function sprintNumberArg(value: string): number {
-    const n = parseInt(value, 10);
-    if (Number.isNaN(n)) throw new Error(`invalid sprint number "${value}"`);
-    return n;
+    return parseCount(value, "sprint number", 1);
   }
 
   sprint

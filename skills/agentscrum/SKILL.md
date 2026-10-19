@@ -66,7 +66,7 @@ Below, `scrum <project>` stands for either form.
 | Add an AC | `scrum_add_ac` | `scrum <project> issue ac <id> "<text>"` |
 | Plan sprints | `scrum_create_sprint`, `scrum_start_sprint`, `scrum_close_sprint` | `scrum <project> sprint create`, `sprint start <n> --goal "..."`, `sprint close <n>` (sprint numbers, not IDs) |
 
-Add `--json` to any of these to get the same object the MCP tool returns. If a step you need is not in this table, **stop and report** which step you could not do. Do not edit the database by hand.
+Add `--json` to get the same object the MCP tool returns (every command above except `issue add` and `issue ac`). If a step you need is not in this table, **stop and report** which step you could not do. Do not edit the database by hand.
 
 ## When it does not work
 

@@ -135,6 +135,8 @@ scrum <project> lesson add "<title>" --what-failed "..." --dont-repeat "..." \
 
 `--json` prints the same object as the matching MCP tool on `work`, `issue show`, `issue status`, `issue claim`, `issue release`, `issue ac-done`, `dod list`, `dod done`, `sprint create|start|close`, `log`, `session register`, `decision add`, and `lesson add`.
 
+`lesson add` records the lesson for the current project unless you pass `--global`; `scrum_log_lesson` does the opposite, recording it with no project when `project_id` is omitted. Lessons with no project do not appear in work packages yet.
+
 The CLI keeps no state between runs, so `session register` only prints the session ID. Pass it to `issue claim --session <id>` for cost attribution. The project names `work`, `session`, `decision`, and `lesson` are now commands; a project with one of those names can still be reached by its numeric ID.
 
 ## Vault export

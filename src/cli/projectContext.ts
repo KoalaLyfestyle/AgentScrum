@@ -19,8 +19,13 @@ export function requireProjectId(): number {
         raw = String(detected.id);
         process.env["SCRUM_PROJECT_ID"] = raw;
       }
-    } catch {
-      // DB not set up yet — fall through to the helpful error below
+    } catch (err) {
+      // A missing database file (#30) gets its own message; anything else falls
+      // through to the helpful error below.
+      if (err instanceof Error && err.message.startsWith("No database at")) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
     }
   }
   if (!raw) {

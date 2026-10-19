@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { addDodItem, listDod, removeDodItem, completeDodItem, getSprintByNumber, listSprints } from "../../services/scrum.js";
 import { requireProjectId } from "../projectContext.js";
+import { parseCount } from "./workflow.js";
 
 export function registerDod(program: Command): void {
   const dod = program.command("dod").description("Manage project Definition of Done");
@@ -67,15 +68,13 @@ export function registerDod(program: Command): void {
         const pid = requireProjectId();
         let sprintId: number;
         if (opts.sprint !== undefined) {
-          const n = parseInt(opts.sprint, 10);
-          if (Number.isNaN(n)) throw new Error(`invalid sprint number "${opts.sprint}"`);
-          sprintId = getSprintByNumber(pid, n).id;
+          sprintId = getSprintByNumber(pid, parseCount(opts.sprint, "--sprint", 1)).id;
         } else {
           const active = listSprints(pid).find((s) => s.status === "active");
           if (!active) throw new Error("no active sprint; pass --sprint <number>");
           sprintId = active.id;
         }
-        const done = completeDodItem(sprintId, parseInt(itemId, 10));
+        const done = completeDodItem(sprintId, parseCount(itemId, "DoD item id", 1));
         if (opts.json) {
           console.log(JSON.stringify(done, null, 2));
           return;
