@@ -11,6 +11,9 @@ import {
   listSprints,
   getIssuesByProject,
   addAc,
+  assignIssue,
+  releaseIssue,
+  completeAc,
   epicKey,
   issueKey,
 } from "../../services/scrum.js";
@@ -178,7 +181,8 @@ export function registerIssue(program: Command): void {
     .command("status <issue-id> <status>")
     .description(`Update issue status (${ISSUE_STATUSES.join("|")})`)
     .option("-r, --reason <text>", "Blocker reason (required when status=blocked)")
-    .action((issueId: string, status: string, opts: { reason?: string }) => {
+    .option("--json", "Output the updated issue as JSON")
+    .action((issueId: string, status: string, opts: { reason?: string; json?: boolean }) => {
       try {
         if (!ISSUE_STATUSES.includes(status as IssueStatus)) {
           console.error(`Invalid status: ${status}. Must be one of: ${ISSUE_STATUSES.join(", ")}`);
@@ -201,6 +205,10 @@ export function registerIssue(program: Command): void {
           }
         }
         const updated = updateIssueStatus(parseInt(issueId, 10), status as IssueStatus, blockerReason);
+        if (opts.json) {
+          console.log(JSON.stringify(updated, null, 2));
+          return;
+        }
         console.log(`Issue ${updated.id} status → ${updated.status}`);
         if (updated.blockerReason) console.log(`  Blocked: ${updated.blockerReason}`);
       } catch (err) {
@@ -212,10 +220,15 @@ export function registerIssue(program: Command): void {
   issue
     .command("show <issue-id>")
     .description("Show full issue detail including ACs and session history")
-    .action((issueId: string) => {
+    .option("--json", "Output as JSON (the same object as scrum_get_issue_detail)")
+    .action((issueId: string, opts: { json?: boolean }) => {
       try {
         const pid = requireProjectId();
         const detail = getIssueDetail(parseInt(issueId, 10));
+        if (opts.json) {
+          console.log(JSON.stringify(detail, null, 2));
+          return;
+        }
         const epicsMap = new Map(listEpics(pid).map((e) => [e.id, e]));
         const epic = epicsMap.get(detail.epicId);
         const key = epic ? issueKey(epic.number, detail.number) : `#${detail.id}`;
@@ -263,6 +276,64 @@ export function registerIssue(program: Command): void {
         const ac = addAc(parseInt(issueId, 10), text);
         console.log(`AC #${ac.id} added to issue #${ac.issueId}`);
         console.log(`  [ ] ${ac.text}`);
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  issue
+    .command("claim <issue-id>")
+    .description("Claim an issue so no other agent takes it (scrum_assign_issue). Claims expire after 30 minutes.")
+    .requiredOption("--by <agent-id>", "Your agent ID")
+    .option("--session <session-id>", "Claude Code session ID for cost attribution (see 'session register')")
+    .option("--json", "Output the claimed issue as JSON")
+    .action((issueId: string, opts: { by: string; session?: string; json?: boolean }) => {
+      try {
+        const claimed = assignIssue(parseInt(issueId, 10), opts.by, opts.session);
+        if (opts.json) {
+          console.log(JSON.stringify(claimed, null, 2));
+          return;
+        }
+        console.log(`Issue ${claimed.id} claimed by ${claimed.claimedBy}`);
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  issue
+    .command("release <issue-id>")
+    .description("Release a claim (scrum_release_issue)")
+    .option("--by <agent-id>", "Your agent ID; refuses to release another agent's claim")
+    .option("--json", "Output the released issue as JSON")
+    .action((issueId: string, opts: { by?: string; json?: boolean }) => {
+      try {
+        const released = releaseIssue(parseInt(issueId, 10), opts.by);
+        if (opts.json) {
+          console.log(JSON.stringify(released, null, 2));
+          return;
+        }
+        console.log(`Issue ${released.id} released`);
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  issue
+    .command("ac-done <ac-id>")
+    .description("Mark an acceptance criterion as met (scrum_complete_ac). Takes the AC's id, not the issue's.")
+    .option("--json", "Output the criterion as JSON")
+    .action((acId: string, opts: { json?: boolean }) => {
+      try {
+        const ac = completeAc(parseInt(acId, 10));
+        if (opts.json) {
+          console.log(JSON.stringify(ac, null, 2));
+          return;
+        }
+        console.log(`AC #${ac.id} on issue #${ac.issueId} done`);
+        console.log(`  [x] ${ac.text}`);
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

@@ -1,5 +1,17 @@
 import type { Command } from "commander";
-import { listSprints, listIssues, listEpics, updateSprint, getVelocity, getSprintByNumber, issueKey } from "../../services/scrum.js";
+import {
+  listSprints,
+  listIssues,
+  listEpics,
+  updateSprint,
+  getVelocity,
+  getSprintByNumber,
+  issueKey,
+  createSprint,
+  startSprint,
+  closeSprint,
+} from "../../services/scrum.js";
+import type { Sprint } from "../../schema/types.js";
 import { requireProjectId } from "../projectContext.js";
 
 export function registerSprint(program: Command): void {
@@ -194,6 +206,63 @@ export function registerSprint(program: Command): void {
           if (opts.verbose && i.description) console.log(`           ${i.description}`);
         }
         console.log();
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  function printSprint(sprint: Sprint, json: boolean | undefined, verb: string): void {
+    if (json) {
+      console.log(JSON.stringify(sprint, null, 2));
+      return;
+    }
+    console.log(`Sprint ${sprint.number} ${verb} (id: ${sprint.id}, status: ${sprint.status})`);
+    if (sprint.goal) console.log(`  Goal: ${sprint.goal}`);
+  }
+
+  function sprintNumberArg(value: string): number {
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n)) throw new Error(`invalid sprint number "${value}"`);
+    return n;
+  }
+
+  sprint
+    .command("create")
+    .description("Create the next sprint in planning status (scrum_create_sprint)")
+    .option("--json", "Output the sprint as JSON")
+    .action((opts: { json?: boolean }) => {
+      try {
+        printSprint(createSprint(requireProjectId()), opts.json, "created");
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  sprint
+    .command("start <sprint-number>")
+    .description("Move a sprint from planning to active (scrum_start_sprint). Without --goal, the goal is cleared.")
+    .option("--goal <text>", "Sprint goal")
+    .option("--json", "Output the sprint as JSON")
+    .action((sprintNumber: string, opts: { goal?: string; json?: boolean }) => {
+      try {
+        const target = getSprintByNumber(requireProjectId(), sprintNumberArg(sprintNumber));
+        printSprint(startSprint(target.id, opts.goal), opts.json, "started");
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    });
+
+  sprint
+    .command("close <sprint-number>")
+    .description("Close a sprint (scrum_close_sprint); then run 'retro'")
+    .option("--json", "Output the sprint as JSON")
+    .action((sprintNumber: string, opts: { json?: boolean }) => {
+      try {
+        const target = getSprintByNumber(requireProjectId(), sprintNumberArg(sprintNumber));
+        printSprint(closeSprint(target.id), opts.json, "closed");
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

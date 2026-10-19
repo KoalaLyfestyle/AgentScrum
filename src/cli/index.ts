@@ -11,6 +11,7 @@ import { registerDod } from "./commands/dod.js";
 import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
 import { registerCost } from "./commands/cost.js";
+import { registerWork, registerSession, registerDecision, registerLesson } from "./commands/workflow.js";
 import fs from "fs";
 import { findProject } from "../services/scrum.js";
 import { getDbPath } from "../db/index.js";
@@ -89,6 +90,8 @@ program
       "  scrum myproject backlog             # issues in planning sprints",
       "  scrum project list                  # all projects",
       "  scrum myproject dod list            # show Definition of Done",
+      "  scrum myproject work -c 20 --agent me   # work package, as scrum_get_work_package",
+      "  scrum myproject issue claim 5 --by me   # claim, as scrum_assign_issue",
       "",
       "Environment variables (set in .env or shell):",
       "  SCRUM_DB_PATH      SQLite file; relative paths resolve from the AgentScrum checkout",
@@ -113,6 +116,10 @@ registerDod(program);
 registerBacklog(program);
 registerRetro(program);
 registerCost(program);
+registerWork(program);
+registerSession(program);
+registerDecision(program);
+registerLesson(program);
 
 // Show help when called with no arguments
 if (process.argv.length === 2) {

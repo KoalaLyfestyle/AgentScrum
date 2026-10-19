@@ -3,6 +3,7 @@
 // named like one of these (#31). Add every new top-level command here.
 export const RESERVED_COMMANDS: ReadonlySet<string> = new Set([
   "init", "project", "epic", "sprint", "issue", "status", "log", "dod", "backlog", "retro", "cost", "help",
+  "work", "session", "decision", "lesson",
 ]);
 
 const RESERVED_FLAGS: ReadonlySet<string> = new Set(["--help", "-h", "--version", "-V"]);
