@@ -20,6 +20,14 @@ let migrateOnOpen: boolean | null = null;
 
 let createOnOpen = true;
 
+/** Thrown by getDb() when the file is missing and setCreateOnOpen(false) is in effect. */
+export class MissingDbError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MissingDbError";
+  }
+}
+
 /**
  * Whether getDb() may create a missing database file. The CLI turns this off
  * for every command except `scrum init`, so a typo in the database path fails
@@ -103,7 +111,7 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
       : process.env["AGENTSCRUM_DB_PATH"]?.trim()
         ? "AGENTSCRUM_DB_PATH"
         : "SCRUM_DB_PATH (not set; this is the default path)";
-    throw new Error(`No database at ${dbPath}. Run 'scrum init <name>' to create one, or check ${variable}.`);
+    throw new MissingDbError(`No database at ${dbPath}. Run 'scrum init <name>' to create one, or check ${variable}.`);
   }
   // Wait up to BUSY_TIMEOUT_MS for another process's write lock. It matches
   // better-sqlite3's default; passing it pins it so it cannot change underneath us.

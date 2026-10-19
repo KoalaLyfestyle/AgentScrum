@@ -1,4 +1,5 @@
 import { findProjectByDirectory } from "../services/scrum.js";
+import { MissingDbError } from "../db/index.js";
 
 /**
  * Shared helper for resolving the current project ID from env.
@@ -22,7 +23,7 @@ export function requireProjectId(): number {
     } catch (err) {
       // A missing database file (#30) gets its own message; anything else falls
       // through to the helpful error below.
-      if (err instanceof Error && err.message.startsWith("No database at")) {
+      if (err instanceof MissingDbError) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
       }
