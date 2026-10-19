@@ -11,7 +11,7 @@ and MCP server processes) against a new demo.db in the output folder, never
 your real database. Stop anything else on port 5180 first. All data is made
 up; every write goes through the MCP tools an agent would call.
 """
-import json, os, subprocess, sys, time, urllib.request
+import json, os, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 from PIL import Image, ImageDraw, ImageFont
@@ -120,23 +120,40 @@ with sync_playwright() as pw:
 
     a, bb = MCP(), MCP()
     shot(f"Sprint board before: '{target_title}' is in To do")
-    # Two agents claim the same issue at once, from separate processes: one wins.
-    ra = a.call("scrum_assign_issue", issue_id=target_id, agent_id="agent-a")
-    try:
-        bb.call("scrum_assign_issue", issue_id=target_id, agent_id="agent-b")
-        lost = "agent-b also won (unexpected)"
-    except RuntimeError as exc:
-        lost = "agent-b is refused: already claimed"
+    # Two agents claim the same issue at the same moment, from separate MCP
+    # server processes. Exactly one claim may succeed.
+    results = {}
+
+    def claim(client, agent):
+        try:
+            client.call("scrum_assign_issue", issue_id=target_id, agent_id=agent)
+            results[agent] = "won"
+        except RuntimeError as exc:
+            results[agent] = str(exc)
+
+    threads = [threading.Thread(target=claim, args=(c, n)) for c, n in ((a, "agent-a"), (bb, "agent-b"))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    winners = [n for n, r in results.items() if r == "won"]
+    if len(winners) != 1:
+        raise SystemExit(f"expected one winning claim, got {results}")
+    winner, loser = winners[0], ("agent-b" if winners[0] == "agent-a" else "agent-a")
+    if "already claimed" not in results[loser]:
+        raise SystemExit(f"{loser} failed for another reason: {results[loser]}")
+    lost = f"{loser} is refused: already claimed"
+    w = a if winner == "agent-a" else bb
     print("claim:", lost)
-    a.call("scrum_update_issue_status", issue_id=target_id, status="in_progress")
-    shot(f"agent-a claims it and starts; {lost}")
+    w.call("scrum_update_issue_status", issue_id=target_id, status="in_progress")
+    shot(f"{winner} claims it and starts; {lost}")
     for ac in target_acs:
-        a.call("scrum_complete_ac", ac_id=ac)
-    a.call("scrum_update_issue_status", issue_id=target_id, status="review")
-    shot("agent-a ticks both acceptance criteria and moves it to Review")
-    a.call("scrum_log_session", issue_id=target_id, summary="Confirmation email sent once per order", tokens_used=23000, model="claude-sonnet-4-6")
-    a.call("scrum_update_issue_status", issue_id=target_id, status="done")
-    shot("agent-a logs its session and marks it Done")
+        w.call("scrum_complete_ac", ac_id=ac)
+    w.call("scrum_update_issue_status", issue_id=target_id, status="review")
+    shot(f"{winner} ticks both acceptance criteria and moves it to Review")
+    w.call("scrum_log_session", issue_id=target_id, summary="Confirmation email sent once per order", tokens_used=23000, model="claude-sonnet-4-6")
+    w.call("scrum_update_issue_status", issue_id=target_id, status="done")
+    shot(f"{winner} logs its session and marks it Done")
     a.p.stdin.close(); bb.p.stdin.close()
     b.close()
 
