@@ -49,7 +49,7 @@ COST_SOURCE=transcript                           # off | manual (default) | tran
 ## Development checks
 
 ```bash
-npm ci && npm run build && npm test          # root: 113 tests in 11 suites
+npm ci && npm run build && npm test          # root: 129 tests in 12 suites
 cd dashboard && npm ci && npm run check && npm test   # dashboard: 16 tests
 ```
 
