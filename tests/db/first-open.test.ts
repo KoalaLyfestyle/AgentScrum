@@ -74,16 +74,20 @@ test("getDb waits out a lock that makes the WAL switch fail at once", async () =
   const code = `
     const db = await import(${JSON.stringify(path.join(root, "dist", "db", "index.js"))});
     (await import("fs")).writeFileSync(${JSON.stringify(ready)}, "");
+    const started = Date.now();
     db.getDb();
+    process.stdout.write(String(Date.now() - started));
   `;
-  const run = new Promise<{ code: number | null; stderr: string }>((resolve) => {
+  const run = new Promise<{ code: number | null; stderr: string; stdout: string }>((resolve) => {
     const child = spawn(process.execPath, ["--input-type=module", "-e", code], {
       env: { ...process.env, SCRUM_DB_PATH: dbPath, SCRUM_MIGRATE_ON_OPEN: "1" },
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stderr = "";
+    let stdout = "";
+    child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
-    child.on("close", (c) => resolve({ code: c, stderr }));
+    child.on("close", (c) => resolve({ code: c, stderr, stdout }));
   });
   while (!fs.existsSync(ready)) await new Promise((r) => setTimeout(r, 5));
   await new Promise((r) => setTimeout(r, 300));
@@ -92,6 +96,8 @@ test("getDb waits out a lock that makes the WAL switch fail at once", async () =
   const result = await run;
   expect(result.stderr).not.toMatch(/locked|Error/);
   expect(result.code).toBe(0);
+  // getDb() only returned after the lock went away, so it did wait.
+  expect(Number(result.stdout)).toBeGreaterThanOrEqual(150);
   const db = new Database(dbPath, { readonly: true });
   expect(db.pragma("journal_mode", { simple: true })).toBe("wal");
   db.close();
@@ -137,8 +143,25 @@ describe("switchToWal", () => {
     expect(calls).toBe(1);
   });
 
-  test("gives up after WAL_SWITCH_TRIES busy answers and throws the busy error", async () => {
-    const { switchToWal, WAL_SWITCH_TRIES } = await import("../../src/db/index.js");
+  test("retries extended busy codes such as SQLITE_BUSY_RECOVERY", async () => {
+    const { switchToWal } = await import("../../src/db/index.js");
+    let calls = 0;
+    switchToWal(
+      {
+        pragma: () => {
+          calls++;
+          if (calls === 1) throw Object.assign(new Error("busy recovery"), { code: "SQLITE_BUSY_RECOVERY" });
+          return "wal";
+        },
+      },
+      () => undefined
+    );
+    expect(calls).toBe(2);
+  });
+
+  test("gives up once the busy timeout has passed and throws the busy error", async () => {
+    const { switchToWal, BUSY_TIMEOUT_MS } = await import("../../src/db/index.js");
+    let clock = 0;
     let calls = 0;
     expect(() =>
       switchToWal(
@@ -148,9 +171,12 @@ describe("switchToWal", () => {
             throw busy();
           },
         },
-        () => undefined
+        (ms) => (clock += ms),
+        () => clock
       )
     ).toThrow("database is locked");
-    expect(calls).toBe(WAL_SWITCH_TRIES);
+    expect(clock).toBeGreaterThanOrEqual(BUSY_TIMEOUT_MS);
+    expect(clock).toBeLessThan(BUSY_TIMEOUT_MS + 50);
+    expect(calls).toBeGreaterThan(50);
   });
 });
