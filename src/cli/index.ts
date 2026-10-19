@@ -11,7 +11,9 @@ import { registerDod } from "./commands/dod.js";
 import { registerBacklog } from "./commands/backlog.js";
 import { registerRetro } from "./commands/retro.js";
 import { registerCost } from "./commands/cost.js";
+import fs from "fs";
 import { findProject } from "../services/scrum.js";
+import { getDbPath } from "../db/index.js";
 import { warnIfUnsupportedNode } from "../db/open.js";
 
 // ---------------------------------------------------------------------------
@@ -47,7 +49,13 @@ if (firstArg && !RESERVED.has(firstArg) && !firstArg.startsWith("-")) {
 }
 
 function resolveExplicitProject(nameOrId: string): void {
+  // Looking up a project must not create a database: only `scrum init` may (#30).
+  // Otherwise a typo in SCRUM_DB_PATH leaves an empty, migrated file behind.
   try {
+    const dbPath = getDbPath();
+    if (!fs.existsSync(dbPath)) {
+      throw new Error(`No database at ${dbPath}. Run 'scrum init <name>' to create one, or check SCRUM_DB_PATH.`);
+    }
     const project = findProject(nameOrId);
     process.env["SCRUM_PROJECT_ID"] = String(project.id);
   } catch (err) {

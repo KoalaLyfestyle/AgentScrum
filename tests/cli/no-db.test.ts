@@ -115,3 +115,15 @@ test("an explicit project name still wins over the working directory", () => {
   expect(typo.status).toBe(1);
   expect(typo.stderr).toContain('Project "statsu" not found');
 });
+
+test("a named project with no database file fails and creates nothing (#30)", () => {
+  const db = path.join(tmp, "typo.db");
+  for (const args of [["nope", "epic", "list"], ["nope"]]) {
+    const result = scrum(args, { env: { SCRUM_DB_PATH: db } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`No database at ${db}`);
+    for (const suffix of ["", "-wal", "-shm"]) {
+      expect(fs.existsSync(db + suffix)).toBe(false);
+    }
+  }
+});
