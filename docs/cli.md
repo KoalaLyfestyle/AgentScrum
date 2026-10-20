@@ -98,7 +98,7 @@ scrum <project> issue status <id> blocked \
   [--reason "why blocked"]                      # prompted interactively if omitted
 scrum <project> issue show <id> [--json]        # ACs, sessions, token count, blocker reason
 scrum <project> issue ac <id> <text>            # add acceptance criterion
-scrum <project> issue ac-done <ac-id>           # tick an acceptance criterion (its id, from show or work)
+scrum <project> issue ac-done <ac-id>           # tick an acceptance criterion (its id, from issue show --json or work)
 scrum <project> issue claim <id> --by <agent> \
   [--session <session-id>]                      # claim; fails if another agent holds it (30 min)
 scrum <project> issue release <id> [--by <agent>]  # release; --by refuses another agent's claim
@@ -133,7 +133,7 @@ scrum <project> lesson add "<title>" --what-failed "..." --dont-repeat "..." \
   [--tags a,b] [--global]
 ```
 
-`--json` prints the same object as the matching MCP tool on `work`, `issue show`, `issue status`, `issue claim`, `issue release`, `issue ac-done`, `dod list`, `dod done`, `sprint create|start|close`, `log`, `session register`, `decision add`, and `lesson add`.
+`--json` prints the same object as the matching MCP tool on `work`, `issue show`, `issue status`, `issue claim`, `issue release`, `issue ac-done`, `dod done`, `sprint create|start|close`, `log`, `session register`, `decision add`, and `lesson add`.
 
 `lesson add` records the lesson for the current project unless you pass `--global`; `scrum_log_lesson` does the opposite, recording it with no project when `project_id` is omitted. Lessons with no project do not appear in work packages yet.
 

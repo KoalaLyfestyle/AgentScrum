@@ -15,7 +15,6 @@ moved here from the README.
 
 Since October 2026 the work is tracked as GitHub issues instead. Open work:
 
-- CLI commands for the steps that are MCP only today (#27).
 - Dashboard build and static export for embedding in other tools.
 
 ## Stack
@@ -28,3 +27,10 @@ Since October 2026 the work is tracked as GitHub issues instead. Open work:
 | CLI | Commander.js (`scrum` command) |
 | Dashboard | SvelteKit + Vite, adapter-node |
 | Container | One image (Node 24 on Debian bookworm), several roles |
+
+## Verification and known failures
+
+- **Tests:** on 20 October 2026, on a Mac with Node 24.21.0, 13 suites and 141 of 141 tests pass, plus 16 of 16 dashboard tests.
+- **Container:** on 20 October 2026, on a Mac, the image built, `migrate` ran, `/healthz` returned ok, and the two-container MCP smoke test passed with one claim winner.
+- **One owner per issue:** `assignIssue` in `src/services/scrum.ts` claims with one conditional `UPDATE ... RETURNING`. `tests/integration/container-roles.test.ts` races two MCP server processes three times and expects exactly one winner each time. A claim older than 30 minutes can be taken over, so a crashed agent does not hold an issue forever.
+- **What failed:** after an upgrade, the first open of a database from before migration 0014 by several processes calling `getDb()` at once (the native CLI or MCP server; the container MCP server never migrates) ran the migration in all of them, and the losers crashed with "renumber_log already exists". `migrateRacingOthers` in `src/db/index.ts` now retries, and `tests/db/renumber.test.ts` races six processes five times.

@@ -1,6 +1,7 @@
 {
   "name": "agentscrum",
   "version": "0.2.0",
+  "license": "MIT",
   "description": "Scrum management for agent swarms — MCP-native sprint state",
   "type": "module",
   "engines": {

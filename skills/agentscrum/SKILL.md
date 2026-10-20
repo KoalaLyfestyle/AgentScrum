@@ -51,7 +51,8 @@ Below, `scrum <project>` stands for either form.
 | Step | MCP tool | CLI |
 |---|---|---|
 | Start a session | `scrum_get_work_package` | `scrum <project> work --capacity <n> --agent <you> --json` |
-| Sprint state and DoD | `scrum_get_current_sprint` | `scrum <project> status --json` |
+| Sprint state | `scrum_get_current_sprint` | `scrum <project> status --json` |
+| The DoD | `scrum_get_work_package` (its `dod`) | `scrum <project> dod list` |
 | Issue detail with ACs | `scrum_get_issue_detail` | `scrum <project> issue show <id> --json`; all issues: `issue list --json` (add `--sprint <n>`) |
 | Claim | `scrum_assign_issue` | `scrum <project> issue claim <id> --by <you>` (add `--session <id>` with `COST_SOURCE=transcript`) |
 | Release | `scrum_release_issue` | `scrum <project> issue release <id> --by <you>` |
@@ -66,7 +67,7 @@ Below, `scrum <project>` stands for either form.
 | Add an AC | `scrum_add_ac` | `scrum <project> issue ac <id> "<text>"` |
 | Plan sprints | `scrum_create_sprint`, `scrum_start_sprint`, `scrum_close_sprint` | `scrum <project> sprint create`, `sprint start <n> --goal "..."`, `sprint close <n>` (sprint numbers, not IDs) |
 
-Add `--json` to get the same object the MCP tool returns (every command above except `issue add` and `issue ac`). If a step you need is not in this table, **stop and report** which step you could not do. Do not edit the database by hand.
+Add `--json` to get the same object the MCP tool returns (every command above except `status`, `issue list`, `dod list`, `issue add`, and `issue ac`). If a step you need is not in this table, **stop and report** which step you could not do. Do not edit the database by hand.
 
 ## When it does not work
 
