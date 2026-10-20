@@ -22,6 +22,8 @@ The pitch is the first two paragraphs, and the agent workflow ("Agent Usage Patt
 
 ## CLI coverage today
 
+Update: #27 added CLI commands for all 11 steps below. This section records the state when the note was written.
+
 A full CLI fallback is not possible yet. The CLI has `status --json`, `issue list --json`, `issue status <id> <status> -r <reason>`, `issue add`, `log <id> <summary>`, and `issue ac <id> <text>` (add an acceptance criterion). These MCP steps have no CLI command:
 
 - `scrum_get_work_package` (the session start)

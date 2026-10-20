@@ -115,3 +115,33 @@ test("an explicit project name still wins over the working directory", () => {
   expect(typo.status).toBe(1);
   expect(typo.stderr).toContain('Project "statsu" not found');
 });
+
+test.each([
+  [["nope", "epic", "list"], {}],
+  [["nope"], {}],
+  [["epic", "list"], {}],
+  [["project", "list"], {}],
+  [["status"], { SCRUM_PROJECT_ID: "1" }],
+])("scrum %j with no database file fails and creates nothing (#30)", (args, extra) => {
+  const db = path.join(tmp, "typo.db");
+  const result = scrum(args as string[], { env: { SCRUM_DB_PATH: db, ...(extra as Record<string, string>) } });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(`No database at ${db}`);
+  expect(result.stderr).toContain("check SCRUM_DB_PATH");
+  for (const suffix of ["", "-wal", "-shm"]) {
+    expect(fs.existsSync(db + suffix)).toBe(false);
+  }
+});
+
+test.each([["status"], ["issue"], ["help"], ["work"], ["7"], ["-x"]])(
+  "scrum init refuses the project name %s and creates nothing (#31)",
+  (name) => {
+    const db = path.join(tmp, "reserved.db");
+    // `--` lets a name starting with "-" through to the check.
+    const args = name.startsWith("-") ? ["init", "--", name] : ["init", name];
+    const result = scrum(args, { env: { SCRUM_DB_PATH: db } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`"${name}"`);
+    expect(fs.existsSync(db)).toBe(false);
+  }
+);

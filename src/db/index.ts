@@ -18,6 +18,26 @@ export function getDbPath(): string {
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let migrateOnOpen: boolean | null = null;
 
+let createOnOpen = true;
+
+/** Thrown by getDb() when the file is missing and setCreateOnOpen(false) is in effect. */
+export class MissingDbError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MissingDbError";
+  }
+}
+
+/**
+ * Whether getDb() may create a missing database file. The CLI turns this off
+ * for every command except `scrum init`, so a typo in the database path fails
+ * instead of leaving an empty, migrated file behind (#30). Call before the
+ * first getDb(). The MCP server and `npm run db:migrate` keep the default.
+ */
+export function setCreateOnOpen(enabled: boolean): void {
+  createOnOpen = enabled;
+}
+
 /** Env setting: SCRUM_MIGRATE_ON_OPEN=0 turns off migrate-on-open (the container sets it). */
 export const MIGRATE_ON_OPEN_ENV = "SCRUM_MIGRATE_ON_OPEN";
 
@@ -71,6 +91,37 @@ function migrateRacingOthers(
   throw firstError;
 }
 
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Put the database in WAL mode. On a file that is not in WAL mode yet, the
+ * switch needs a brief exclusive lock, and SQLite answers SQLITE_BUSY at once
+ * there instead of waiting for the busy timeout, so several processes opening
+ * a new database together can fail (#33). Retry only busy errors (including
+ * extended codes such as SQLITE_BUSY_RECOVERY), with a short random wait
+ * (getDb is synchronous), for as long as the busy timeout other locks get.
+ * Throw anything else at once.
+ */
+export function switchToWal(
+  sqlite: { pragma(source: string): unknown },
+  sleep: (ms: number) => void = sleepSync,
+  now: () => number = Date.now
+): void {
+  const deadline = now() + BUSY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      sqlite.pragma("journal_mode = WAL");
+      return;
+    } catch (err) {
+      const code = String((err as { code?: unknown } | null)?.code ?? "");
+      if (!code.startsWith("SQLITE_BUSY") || now() >= deadline) throw err;
+      sleep(10 + Math.floor(Math.random() * 40));
+    }
+  }
+}
+
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   if (_db) return _db;
 
@@ -85,10 +136,18 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
       );
     }
   }
+  if (!createOnOpen && dbPath !== ":memory:" && !fs.existsSync(dbPath)) {
+    const variable = process.env["SCRUM_DB_PATH"]?.trim()
+      ? "SCRUM_DB_PATH"
+      : process.env["AGENTSCRUM_DB_PATH"]?.trim()
+        ? "AGENTSCRUM_DB_PATH"
+        : "SCRUM_DB_PATH (not set; this is the default path)";
+    throw new MissingDbError(`No database at ${dbPath}. Run 'scrum init <name>' to create one, or check ${variable}.`);
+  }
   // Wait up to BUSY_TIMEOUT_MS for another process's write lock. It matches
   // better-sqlite3's default; passing it pins it so it cannot change underneath us.
   const sqlite = openSqlite(dbPath, { timeout: BUSY_TIMEOUT_MS });
-  sqlite.pragma("journal_mode = WAL");
+  switchToWal(sqlite);
   sqlite.pragma("foreign_keys = ON");
 
   _db = drizzle(sqlite, { schema });

@@ -61,6 +61,9 @@ scrum <project> sprint update <N> \
   [--pr-desc "..."]
 scrum <project> sprint velocity                 # story points completed per sprint
 scrum <project> sprint velocity --tokens        # add token usage column + per-agent breakdown
+scrum <project> sprint create                   # next sprint, in planning
+scrum <project> sprint start <N> [--goal "..."] # planning -> active (no --goal clears the goal)
+scrum <project> sprint close <N>                # active -> closed; then run retro
 
 # ── Status (current sprint summary) ─────────────────────────────────────
 scrum <project> status             # sprint summary + active issue + DoD
@@ -93,8 +96,12 @@ scrum <project> issue edit <issue-id> \
 scrum <project> issue status <id> <status>      # todo|in_progress|review|done|blocked
 scrum <project> issue status <id> blocked \
   [--reason "why blocked"]                      # prompted interactively if omitted
-scrum <project> issue show <id>                 # ACs, sessions, token count, blocker reason
+scrum <project> issue show <id> [--json]        # ACs, sessions, token count, blocker reason
 scrum <project> issue ac <id> <text>            # add acceptance criterion
+scrum <project> issue ac-done <ac-id>           # tick an acceptance criterion (its id, from issue show --json or work)
+scrum <project> issue claim <id> --by <agent> \
+  [--session <session-id>]                      # claim; fails if another agent holds it (30 min)
+scrum <project> issue release <id> [--by <agent>]  # release; --by refuses another agent's claim
 
 # ── Backlog ───────────────────────────────────────────────────────────────
 scrum <project> backlog                         # unassigned issues + planning-sprint issues
@@ -112,10 +119,25 @@ scrum <project> cost --json                     # machine-readable JSON
 scrum <project> dod list           # show DoD checklist
 scrum <project> dod add "<step>"   # append item
 scrum <project> dod remove <id>    # remove item
+scrum <project> dod done <id> [--sprint <N>]   # tick an item for the active (or named) sprint
 
 # ── Session logging ───────────────────────────────────────────────────────
 scrum <project> log <issue-id> <summary> [--tokens N] [--auditor pass|fail|skipped] [--model <name>]
+
+# ── Agent workflow (same results as the MCP tools) ──────────────────────
+scrum <project> work --capacity <points> [--agent <id>]   # work package (scrum_get_work_package)
+scrum session register [--id <session-id>]   # find this folder's Claude Code session ID
+scrum <project> decision add "<title>" --context "..." --decision "..." \
+  [--rejected "..."] [--consequences "..."]
+scrum <project> lesson add "<title>" --what-failed "..." --dont-repeat "..." \
+  [--tags a,b] [--global]
 ```
+
+`--json` prints the same object as the matching MCP tool on `work`, `issue show`, `issue status`, `issue claim`, `issue release`, `issue ac-done`, `dod done`, `sprint create|start|close`, `log`, `session register`, `decision add`, and `lesson add`.
+
+`lesson add` records the lesson for the current project unless you pass `--global`; `scrum_log_lesson` does the opposite, recording it with no project when `project_id` is omitted. Lessons with no project do not appear in work packages yet.
+
+The CLI keeps no state between runs, so `session register` only prints the session ID. Pass it to `issue claim --session <id>` for cost attribution. The project names `work`, `session`, `decision`, and `lesson` are now commands; a project with one of those names can still be reached by its numeric ID.
 
 ## Vault export
 

@@ -1,19 +1,23 @@
 # AgentScrum
 
-Scrum management for agent swarms. Exposes sprint state via an MCP server so any AI agent can manage a full sprint lifecycle — creating projects, epics, sprints, issues, ACs, and logging decisions — without reading files or needing a human PM.
+**Status: prototype.** It runs Winston's own agent sprints on one machine; there is no hosted version and no auth.
 
-A cold-start agent calls `scrum_get_work_package` with a capacity in story points and receives a complete, fully-briefed task list (title, description, ACs, DoD) in one shot. No cascading reads.
+Several AI coding agents on one backlog need a shared sprint board: who owns which issue, what "done" means, and what each session cost. AgentScrum keeps that state in SQLite and serves it to agents through an MCP server, so an agent starts a session with one call, claims an issue, ticks its acceptance criteria, and logs its work while you watch on a read-only dashboard.
 
-## Why use it
+- **One call to start a session.** `scrum_get_work_package` returns the sprint goal, the Definition of Done, and every issue the agent can take, with its acceptance criteria, up to a story-point capacity.
+- **One owner per issue.** A claim is a single conditional `UPDATE`, so when two agents claim the same issue at once, exactly one wins. Issue numbers stay unique under concurrent writers.
+- **A record you can review.** Session logs feed the token totals, and velocity counts the story points of done issues in closed sprints. Decisions and lessons come back in every work package and show on the dashboard. The retro lists blocked issues with their reasons, done issues with open acceptance criteria, expensive issues, and cycle time.
+- **One image.** `docker compose up` migrates the database and starts the dashboard; each agent session starts its own MCP container on the same volume.
 
-- **One call to start a session.** The work package holds the sprint goal, the Definition of Done, and every issue the agent can take, with its acceptance criteria.
-- **Several agents, one backlog.** Claims stop two agents taking the same issue, and numbers stay unique when agents write at the same time.
-- **A record you can review.** Session logs, blocker reasons, decisions, and lessons feed sprint retros, velocity, and token cost, and a read-only dashboard shows them.
-- **Works without MCP too.** The `scrum` CLI covers the core steps, and the agent skill says what to do when a step has no CLI command.
+![AgentScrum dashboard overview: 8 issues, 5 done, 184.0k tokens logged, Sprint 2 — Checkout active](docs/media/dashboard-overview.png)
+
+https://github.com/user-attachments/assets/37e17406-e011-4742-81c9-2e41c2d05274
+
+Demo data, written through the real MCP server by two agent processes. The dashboard does not push updates, so the page reloads after each agent step. Music: "Lobby Time" by Kevin MacLeod (incompetech.com), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
 
 ## Quick Start (container)
 
-You need Docker (Docker Desktop on macOS) and Claude Code. If `~/.claude/skills/agentscrum` already exists, remove it first. Then run these from a terminal:
+You need Docker with Compose v2 (Docker Desktop or OrbStack on macOS) and Claude Code. If `~/.claude/skills/agentscrum` already exists, remove it first. Then:
 
 ```bash
 git clone https://github.com/KoalaLyfestyle/AgentScrum.git
@@ -24,13 +28,16 @@ mkdir -p ~/.claude/skills && ln -s "$PWD/skills/agentscrum" ~/.claude/skills/age
 docker compose run --rm cli init myproject                         # create your first project
 ```
 
-The dashboard is at http://127.0.0.1:5180. Data lives in the Docker volume `agentscrum-data`. Run the CLI from the checkout as `docker compose run --rm cli myproject <command>`, always naming the project.
+`init` prints `Project created: myproject (id: 1)` and `Sprint 1 created (id: 1, status: planning)`, then asks for Definition of Done items: type some, or press Enter at `DoD 1:` to skip. Then `docker compose ps` shows `dashboard` as healthy, http://127.0.0.1:5180 shows `myproject`, and `docker compose run --rm cli myproject status` prints `Sprint 1 — PLANNING` and `Issues: 0 total`. Data lives in the Docker volume `agentscrum-data`. Always name the project when you run the CLI in the container.
 
-The skill is a symlink, so `git pull` keeps it current. It breaks if you move the checkout. To remove it: `rm ~/.claude/skills/agentscrum`.
+To check the MCP path without Claude Code, run the end-to-end smoke test on a scratch volume. It needs Node on the host, and it creates rows, so never point it at real data. The MCP container never migrates, so migrate the scratch volume first:
 
-More: [container.md](docs/container.md) (health check, backup, restore, import, limits) and [setup.md](docs/setup.md) (native install with Node 24, and the dashboard).
+```bash
+docker run --rm -v agentscrum-smoke:/data agentscrum:local migrate && AGENTSCRUM_VOLUME=agentscrum-smoke node scripts/mcp-smoke.mjs -- bin/agentscrum-mcp
+docker volume rm agentscrum-smoke
+```
 
-To see or undo everything an install changes outside the checkout, read [What installing AgentScrum changes on your machine](docs/setup.md#what-installing-agentscrum-changes-on-your-machine).
+More: [container.md](docs/container.md) (health check, backup, restore, import, limits), [setup.md](docs/setup.md) (native install with Node 24), and [what an install changes on your machine](docs/setup.md#what-installing-agentscrum-changes-on-your-machine).
 
 ## An agent session
 
@@ -43,11 +50,31 @@ scrum_log_session { "issue_id": 3, "summary": "...", "tokens_used": 8400, "audit
 scrum_complete_dod_item { "sprint_id": 2, "dod_item_id": 4 }
 ```
 
-The first call returns the sprint state, the DoD checklist, and fully briefed issues up to the capacity in story points. The full loop, the conventions, the CLI fallback, and debug help are in the [agentscrum skill](skills/agentscrum/SKILL.md).
+The full loop, the conventions, the CLI fallback, and debug help are in the [agentscrum skill](skills/agentscrum/SKILL.md).
 
-## Project selection
+## How it works
 
-Name the project (`scrum myproject issue list`), set `SCRUM_PROJECT_ID`, or run `scrum` inside the project's folder, in that order. See [cli.md](docs/cli.md#project-selection).
+```mermaid
+flowchart LR
+    agent["Agent + skill<br/>skills/agentscrum"] -->|stdio| mcp["MCP server<br/>src/mcp/server.ts"]
+    you["You"] --> cli["scrum CLI<br/>src/cli"]
+    mcp --> svc["services/scrum.ts<br/>claims, work package, velocity"]
+    cli --> svc
+    svc --> db["src/db<br/>Drizzle + better-sqlite3, WAL"]
+    db --> file[("SQLite file or<br/>agentscrum-data volume")]
+    dash["Dashboard<br/>SvelteKit, dashboard/"] -->|read only| svc
+    dash -.->|read only| db
+```
+
+The business logic lives in `src/services/scrum.ts`. The MCP server and the CLI are thin layers over it, and the dashboard reads through it (its main page also reads the database directly). Each runs as its own process on the same SQLite file. In WAL mode readers never block, and writers queue for up to 5 seconds instead of failing; claims and issue numbers use single statements or immediate transactions, so the database itself settles races. In the container, one image plays every role (`migrate`, `dashboard`, `mcp`, `cli`, `backup`, `restore`, `import`, `counts`, `doctor`), chosen by `docker/entrypoint.sh`.
+
+## Limits
+
+One machine and one SQLite file; no auth, so keep the dashboard on `127.0.0.1`. The dashboard's Live view shows invented activity and is a design mock.
+
+## Design note
+
+**A choice:** claims are enforced by SQLite, not by a lock service or a coordinator agent. One conditional `UPDATE` either takes the issue or changes nothing, which works the same across the CLI, many MCP processes, and containers, and needs nothing else running.
 
 ## Documentation
 
@@ -59,32 +86,10 @@ Name the project (`scrum myproject issue list`), set `SCRUM_PROJECT_ID`, or run 
 | [docs/mcp-tools.md](docs/mcp-tools.md) | All 27 MCP tools |
 | [docs/cli.md](docs/cli.md) | Project selection, issue and epic keys, every CLI command, vault export |
 | [docs/maintenance.md](docs/maintenance.md) | Database location, renumbering, environment variables, development checks |
+| [docs/history.md](docs/history.md) | Build history by sprint, open work, the stack, and [verification and known failures](docs/history.md#verification-and-known-failures) |
 
-## Stack
+If AgentScrum is useful to you, a star or a fork is appreciated.
 
-| Layer           | Technology                     |
-| --------------- | ------------------------------ |
-| Backend         | Node.js + TypeScript           |
-| Database        | SQLite via Drizzle ORM         |
-| Agent interface | MCP server (stdio, 27 tools)   |
-| CLI             | Commander.js (`scrum` command) |
-| Dashboard       | SvelteKit + Vite               |
+## License
 
-## Status
-
-| Sprint | Goal                                                                          | Status |
-| ------ | ----------------------------------------------------------------------------- | ------ |
-| 1      | Data model + CLI                                                              | ✓ Done |
-| 2      | MCP server                                                                    | ✓ Done |
-| 3      | Story points, work package, DoD                                               | ✓ Done |
-| 4      | CLI polish, multi-project, edit operations                                    | ✓ Done |
-| 5      | Claim locking, token velocity, cost reporting                                 | ✓ Done |
-| 6      | Session model tracking, issue lifecycle timestamps, DoD per-sprint completion | ✓ Done |
-| 7      | SvelteKit dashboard: overview, sprint board, velocity, tokens, epics, decisions, lessons | ✓ Done |
-
-## Roadmap (Open Issues)
-
-### Near-term
-
-- CLI commands for the steps that are MCP only today (#27)
-- Dashboard build + static export for embedding in other tools
+MIT. See [LICENSE](LICENSE).

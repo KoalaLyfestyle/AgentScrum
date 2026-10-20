@@ -50,21 +50,24 @@ Below, `scrum <project>` stands for either form.
 
 | Step | MCP tool | CLI |
 |---|---|---|
-| Sprint state and DoD | `scrum_get_current_sprint` | `scrum <project> status --json` |
-| List issues with ACs | `scrum_get_issue_detail` | `scrum <project> issue list --json` (add `--sprint <n>` for one sprint) |
+| Start a session | `scrum_get_work_package` | `scrum <project> work --capacity <n> --agent <you> --json` |
+| Sprint state | `scrum_get_current_sprint` | `scrum <project> status --json` |
+| The DoD | `scrum_get_work_package` (its `dod`) | `scrum <project> dod list` |
+| Issue detail with ACs | `scrum_get_issue_detail` | `scrum <project> issue show <id> --json`; all issues: `issue list --json` (add `--sprint <n>`) |
+| Claim | `scrum_assign_issue` | `scrum <project> issue claim <id> --by <you>` (add `--session <id>` with `COST_SOURCE=transcript`) |
+| Release | `scrum_release_issue` | `scrum <project> issue release <id> --by <you>` |
 | Change status | `scrum_update_issue_status` | `scrum <project> issue status <id> <status>`; for blocked: `scrum <project> issue status <id> blocked -r "<reason>"` (always pass `-r`; without it the CLI waits for input) |
-| Create an issue | `scrum_create_issue` | `scrum <project> issue add <epic-id> "<title>" --points <n> --sprint <n> -d "<description>"` |
+| Tick an AC | `scrum_complete_ac` | `scrum <project> issue ac-done <ac-id>` |
 | Log the session | `scrum_log_session` | `scrum <project> log <id> "<summary>" --tokens <n> --auditor pass` |
+| Tick a DoD item | `scrum_complete_dod_item` | `scrum <project> dod done <item-id>` (active sprint; or `--sprint <n>`) |
+| Record a decision | `scrum_log_decision` | `scrum <project> decision add "<title>" --context "..." --decision "..." --rejected "..."` |
+| Record a lesson | `scrum_log_lesson` | `scrum <project> lesson add "<title>" --what-failed "..." --dont-repeat "..."` |
+| Register the session | `scrum_register_session` | `scrum session register` prints the ID; the CLI keeps no state, so pass it to `issue claim --session` |
+| Create an issue | `scrum_create_issue` | `scrum <project> issue add <epic-id> "<title>" --points <n> --sprint <n> -d "<description>"` |
 | Add an AC | `scrum_add_ac` | `scrum <project> issue ac <id> "<text>"` |
+| Plan sprints | `scrum_create_sprint`, `scrum_start_sprint`, `scrum_close_sprint` | `scrum <project> sprint create`, `sprint start <n> --goal "..."`, `sprint close <n>` (sprint numbers, not IDs) |
 
-These steps have no CLI command yet (#27 adds them). Without MCP, **stop and report** which step you could not do. Do not edit the database by hand.
-
-- `scrum_get_work_package` (use `status --json` and `issue list --json` to read, but do not treat that as a claim)
-- `scrum_assign_issue`, `scrum_release_issue`
-- `scrum_complete_ac`
-- `scrum_complete_dod_item`
-- `scrum_register_session`, `scrum_log_decision`, `scrum_log_lesson`
-- `scrum_create_sprint`, `scrum_start_sprint`, `scrum_close_sprint`
+Add `--json` to get the same object the MCP tool returns (every command above except `status`, `issue list`, `dod list`, `issue add`, and `issue ac`). If a step you need is not in this table, **stop and report** which step you could not do. Do not edit the database by hand.
 
 ## When it does not work
 

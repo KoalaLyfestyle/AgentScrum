@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { logSession } from "../../services/scrum.js";
+import { logSession, getIssueDetail } from "../../services/scrum.js";
 import type { AuditorVerdict } from "../../schema/types.js";
 
 const VERDICTS: AuditorVerdict[] = ["pass", "fail", "skipped"];
@@ -11,11 +11,12 @@ export function registerLog(program: Command): void {
     .option("--tokens <n>", "Tokens used in this session", "0")
     .option("--auditor <verdict>", `Auditor verdict (${VERDICTS.join("|")})`)
     .option("--model <name>", "Model used in this session (e.g. claude-sonnet-4-6)")
+    .option("--json", "Output the session entry as JSON")
     .action(
       async (
         issueId: string,
         summary: string,
-        opts: { tokens: string; auditor?: string; model?: string }
+        opts: { tokens: string; auditor?: string; model?: string; json?: boolean }
       ) => {
         try {
           const tokens = parseInt(opts.tokens, 10);
@@ -36,6 +37,12 @@ export function registerLog(program: Command): void {
           }
 
           const session = await logSession(parseInt(issueId, 10), summary, tokens, auditor, opts.model);
+          if (opts.json) {
+            // The same shape as scrum_log_session.
+            const issueTokensTotal = getIssueDetail(session.issueId).tokensUsed;
+            console.log(JSON.stringify({ session, issue_tokens_total: issueTokensTotal }, null, 2));
+            return;
+          }
           console.log(`Session logged for issue #${session.issueId} on ${session.createdAt.slice(0, 10)}`);
           if (session.tokensUsed > 0) console.log(`  Tokens: ${session.tokensUsed}`);
           if (auditor) console.log(`  Auditor: ${auditor.toUpperCase()}`);
