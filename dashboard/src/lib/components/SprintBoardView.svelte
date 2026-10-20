@@ -2,7 +2,7 @@
 	import Badge from './Badge.svelte';
 	import IssueKey from './IssueKey.svelte';
 	import StatCard from './StatCard.svelte';
-	import { fmt } from '$lib/utils/fmt.js';
+	import { fmt, sprintLabel } from '$lib/utils/fmt.js';
 
 	let {
 		data,
@@ -47,7 +47,7 @@
 	<div style="margin-bottom:var(--space-5);">
 		<button class="btn btn-ghost" style="font-size:var(--text-xs);padding:4px 10px;margin-bottom:var(--space-3);" onclick={() => onNavigate({ view: 'sprints' })}>← All Sprints</button>
 		<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:4px;">
-			<h2 style="margin:0;">{sprint?.title}</h2>
+			<h2 style="margin:0;">{sprint ? sprintLabel(sprint) : ''}</h2>
 			<Badge status={sprint?.status}/>
 		</div>
 		<p style="font-family:var(--font-body);font-size:var(--text-sm);color:var(--text-muted);font-style:italic;margin:0 0 var(--space-4);">{sprint?.goal}</p>

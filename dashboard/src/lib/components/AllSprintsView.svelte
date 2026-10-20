@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Badge from './Badge.svelte';
 	import UsageBar from './UsageBar.svelte';
-	import { fmt } from '$lib/utils/fmt.js';
+	import { fmt, sprintLabel } from '$lib/utils/fmt.js';
 
 	let {
 		data,
@@ -78,7 +78,7 @@
 					<div>
 						<div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:4px;">
 							<span style="font-family:var(--font-mono);font-size:var(--text-sm);color:var(--accent-ember);font-weight:500;">S{String(sprint.number).padStart(2, '0')}</span>
-							<h3 style="font-size:var(--text-md);margin:0;">{sprint.title ?? `Sprint ${sprint.number}`}</h3>
+							<h3 style="font-size:var(--text-md);margin:0;">{sprintLabel(sprint)}</h3>
 							<Badge status={sprint.status}/>
 						</div>
 						<p style="font-family:var(--font-body);font-size:var(--text-sm);color:var(--text-muted);font-style:italic;margin:0 0 var(--space-1);">{sprint.goal ?? '—'}</p>

@@ -4,7 +4,7 @@
 	import BarChart from './BarChart.svelte';
 	import Badge from './Badge.svelte';
 	import IssueKey from './IssueKey.svelte';
-	import { fmt } from '$lib/utils/fmt.js';
+	import { fmt, sprintLabel } from '$lib/utils/fmt.js';
 
 	let {
 		data,
@@ -73,7 +73,7 @@
 	{#if activeSprint}
 		<div>
 			<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
-				<div class="label-upper" style="font-size:10px;">Per-Issue Tokens — {activeSprint.title}</div>
+				<div class="label-upper" style="font-size:10px;">Per-Issue Tokens — {sprintLabel(activeSprint)}</div>
 				<span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-muted);">⚠ = &gt;2× median ({fmt.tokens(median())})</span>
 			</div>
 			<div class="glass-standard" style="padding:0;overflow-x:auto;">

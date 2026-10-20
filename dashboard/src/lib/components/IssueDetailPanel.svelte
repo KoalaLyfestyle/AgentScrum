@@ -2,7 +2,7 @@
 	import Icon from './Icon.svelte';
 	import Badge from './Badge.svelte';
 	import IssueKey from './IssueKey.svelte';
-	import { fmt } from '$lib/utils/fmt.js';
+	import { fmt, sprintLabel } from '$lib/utils/fmt.js';
 
 	let {
 		issue,
@@ -25,7 +25,7 @@
 	let acDone = $derived(acs.filter((a: any) => a.completed).length);
 
 	let metaItems = $derived([
-		['Sprint', sprint?.title ?? '—'],
+		['Sprint', sprint ? sprintLabel(sprint) : '—'],
 		['Epic', epic?.title ?? '—'],
 		['Assigned', issue.assignedTo ?? 'Unassigned'],
 		['Points', issue.storyPoints ?? '—'],

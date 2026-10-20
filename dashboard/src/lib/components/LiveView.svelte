@@ -3,7 +3,7 @@
 	import IssueKey from './IssueKey.svelte';
 	import Badge from './Badge.svelte';
 	import Icon from './Icon.svelte';
-	import { fmt } from '$lib/utils/fmt.js';
+	import { fmt, sprintLabel } from '$lib/utils/fmt.js';
 
 	let {
 		data,
@@ -140,7 +140,7 @@
 					<span style="font-family:var(--font-display);font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent-primary);">Live</span>
 					<span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:4px;">· simulated · Langfuse streaming coming soon</span>
 				</div>
-				<h2 style="margin:0;">{activeSprint.title}</h2>
+				<h2 style="margin:0;">{sprintLabel(activeSprint)}</h2>
 				<p style="font-family:var(--font-body);font-size:var(--text-sm);color:var(--text-muted);font-style:italic;margin:4px 0 0;">{activeSprint.goal}</p>
 			</div>
 			<div style="display:flex;gap:var(--space-3);flex-shrink:0;">
