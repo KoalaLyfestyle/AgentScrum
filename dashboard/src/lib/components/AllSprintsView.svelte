@@ -21,7 +21,7 @@
 		allSprints
 			.filter((s: any) => {
 				if (filter !== 'All' && s.status.toLowerCase() !== filter.toLowerCase()) return false;
-				if (search && !s.title?.toLowerCase().includes(search.toLowerCase()) && !s.goal?.toLowerCase().includes(search.toLowerCase())) return false;
+				if (search && !sprintLabel(s).toLowerCase().includes(search.toLowerCase()) && !s.goal?.toLowerCase().includes(search.toLowerCase())) return false;
 				return true;
 			})
 			.sort((a: any, b: any) =>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { sprintLabel } from '$lib/utils/fmt.js';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -132,7 +133,7 @@
 							S{String(s.number).padStart(2, '0')}
 						</span>
 						<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-							{(s.title ?? `Sprint ${s.number}`).replace(/Sprint \d+ — /, '')}
+							{sprintLabel(s).replace(/^Sprint \d+ — /, '')}
 						</span>
 						<span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:{statusDotColor(s.status)};{s.status === 'active' ? `box-shadow:0 0 6px ${statusDotColor(s.status)}` : ''}"></span>
 					</div>
