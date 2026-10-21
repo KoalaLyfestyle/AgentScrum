@@ -179,6 +179,8 @@ test("decision add and lesson add record what later agents read", () => {
   const pkg = json("demo", "work", "-c", "5");
   expect(pkg.decisions.map((d: { title: string }) => d.title)).toContain("Use SQLite");
   expect(pkg.lessons.map((l: { title: string }) => l.title)).toContain("Migrations race");
+  // #37: a lesson logged without a project must still reach the work package.
+  expect(pkg.lessons.map((l: { title: string }) => l.title)).toContain("Global");
   expect(scrum("demo", "decision", "add", "No context", "--decision", "x").status).not.toBe(0);
 });
 

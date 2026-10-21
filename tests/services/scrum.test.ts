@@ -286,6 +286,47 @@ describe("getWorkPackage", () => {
     expect(pkg.lessons).toHaveLength(1);
     expect(pkg.lessons[0]!.title).toBe("Don't skip migrations");
   });
+
+  it("includes lessons logged without a project (#37)", () => {
+    const { project, sprint } = scrum.initProject("wp-cross-lesson");
+    scrum.startSprint(sprint.id);
+    scrum.logLesson({
+      title: "Project lesson",
+      whatFailed: "a",
+      dontRepeat: "b",
+      projectId: project.id,
+    });
+    scrum.logLesson({ title: "Cross-project lesson", whatFailed: "x", dontRepeat: "y" });
+
+    const { project: other } = scrum.initProject("wp-cross-lesson-other");
+    scrum.logLesson({ title: "Other project lesson", whatFailed: "p", dontRepeat: "q", projectId: other.id });
+
+    const pkg = scrum.getWorkPackage(project.id, 0);
+    expect(pkg.lessons.map((l) => l.title)).toEqual(["Project lesson", "Cross-project lesson"]);
+  });
+
+  it("keeps the 10 most recent lessons, including unscoped ones (#37)", () => {
+    const { project, sprint } = scrum.initProject("wp-lesson-cap");
+    scrum.startSprint(sprint.id);
+    for (let i = 1; i <= 12; i++) {
+      scrum.logLesson({ title: `Lesson ${i}`, whatFailed: "f", dontRepeat: "d" });
+    }
+
+    const pkg = scrum.getWorkPackage(project.id, 0);
+    expect(pkg.lessons).toHaveLength(10);
+    expect(pkg.lessons.map((l) => l.title)).toEqual([
+      "Lesson 3",
+      "Lesson 4",
+      "Lesson 5",
+      "Lesson 6",
+      "Lesson 7",
+      "Lesson 8",
+      "Lesson 9",
+      "Lesson 10",
+      "Lesson 11",
+      "Lesson 12",
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
