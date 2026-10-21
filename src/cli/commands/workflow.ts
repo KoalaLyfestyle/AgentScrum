@@ -132,7 +132,7 @@ export function registerLesson(program: Command): void {
     .requiredOption("--what-failed <text>", "What went wrong and how it showed")
     .requiredOption("--dont-repeat <text>", "What not to do next time")
     .option("--tags <list>", "Comma-separated tags, e.g. 'drizzle,migration'")
-    .option("--global", "Record it with no project, as scrum_log_lesson does when project_id is omitted. Work packages do not show these yet.")
+    .option("--global", "Record it with no project, as scrum_log_lesson does when project_id is omitted. Work packages for every project include these.")
     .option("--json", "Output the lesson as JSON")
     .action(
       (title: string, opts: { whatFailed: string; dontRepeat: string; tags?: string; global?: boolean; json?: boolean }) => {
