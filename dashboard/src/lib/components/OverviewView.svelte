@@ -4,7 +4,7 @@
 	import ProgressRing from './ProgressRing.svelte';
 	import GroupedBarChart from './GroupedBarChart.svelte';
 	import Badge from './Badge.svelte';
-	import { fmt } from '$lib/utils/fmt.js';
+	import { fmt, sprintLabel } from '$lib/utils/fmt.js';
 
 	let {
 		data,
@@ -93,7 +93,7 @@
 			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-3);">
 				<div>
 					<div class="label-upper" style="font-size:10px;margin-bottom:4px;">Active Sprint</div>
-					<h4 style="margin:0;">{activeSprint?.title ?? 'No active sprint'}</h4>
+					<h4 style="margin:0;">{activeSprint ? sprintLabel(activeSprint) : 'No active sprint'}</h4>
 				</div>
 				{#if activeSprint}
 					<button class="btn btn-ghost" style="font-size:var(--text-xs);padding:6px 12px;" onclick={() => onNavigate({ view: 'sprint', sprint: activeSprint.id })}>View board →</button>

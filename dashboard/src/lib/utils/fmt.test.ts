@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmt } from "./fmt.js";
+import { fmt, sprintLabel } from "./fmt.js";
 
 describe("fmt.tokens", () => {
   it("returns em-dash for falsy input", () => {
@@ -73,5 +73,18 @@ describe("fmt.ago", () => {
     const now = new Date();
     const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
     expect(fmt.ago(twoDaysAgo)).toBe("2d ago");
+  });
+});
+
+describe("sprintLabel", () => {
+  it("uses the title when there is one", () => {
+    expect(sprintLabel({ number: 2, title: "Sprint 2 — Polish" })).toBe("Sprint 2 — Polish");
+  });
+
+  it("falls back to the sprint number for an untitled sprint (#36)", () => {
+    // scrum init creates Sprint 1 with title NULL.
+    expect(sprintLabel({ number: 1, title: null })).toBe("Sprint 1");
+    expect(sprintLabel({ number: 3 })).toBe("Sprint 3");
+    expect(sprintLabel({ number: 4, title: "   " })).toBe("Sprint 4");
   });
 });

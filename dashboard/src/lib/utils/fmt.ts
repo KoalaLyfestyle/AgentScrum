@@ -21,3 +21,12 @@ export const fmt = {
 		return Math.round(m / 1440) + 'd ago';
 	}
 };
+
+/**
+ * A sprint's display name: its title, or "Sprint <number>" when it has none.
+ * New projects start with an untitled Sprint 1 (sprints.title is nullable).
+ */
+export function sprintLabel(sprint: { number: number; title?: string | null }): string {
+	const title = sprint.title?.trim();
+	return title ? title : `Sprint ${sprint.number}`;
+}

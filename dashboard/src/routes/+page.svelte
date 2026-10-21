@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import Sidebar from '$lib/components/Sidebar.svelte';
+	import { sprintLabel } from '$lib/utils/fmt.js';
 	import IssueDetailPanel from '$lib/components/IssueDetailPanel.svelte';
 	import OverviewView from '$lib/components/OverviewView.svelte';
 	import LiveView from '$lib/components/LiveView.svelte';
@@ -50,7 +51,8 @@
 	// Breadcrumb label
 	let breadcrumb = $derived(() => {
 		if (view === 'sprint') {
-			return data.sprints.find((s) => s.id === sprintId)?.title ?? 'Sprint';
+			const sprint = data.sprints.find((s) => s.id === sprintId);
+			return sprint ? sprintLabel(sprint) : 'Sprint';
 		}
 		if (view === 'epic') {
 			return data.epics.find((e) => e.id === epicId)?.title ?? 'Epic';
