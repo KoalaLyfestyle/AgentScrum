@@ -274,7 +274,7 @@ export function startSprint(sprintId: number, goal?: string): Sprint {
   const db = getDb();
   const sprint = db
     .update(schema.sprints)
-    .set({ status: "active", goal: goal ?? null, startedAt: now() })
+    .set({ status: "active", startedAt: now(), ...(goal !== undefined && { goal }) })
     .where(eq(schema.sprints.id, sprintId))
     .returning()
     .get();

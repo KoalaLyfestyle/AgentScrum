@@ -600,6 +600,23 @@ describe("updateSprint", () => {
   });
 });
 
+describe("startSprint goal (#38)", () => {
+  it("keeps the existing goal when started without one", () => {
+    const { sprint } = scrum.initProject("start-keeps-goal");
+    scrum.updateSprint(sprint.id, { goal: "Planned goal" });
+    const started = scrum.startSprint(sprint.id);
+    expect(started.status).toBe("active");
+    expect(started.goal).toBe("Planned goal");
+  });
+
+  it("replaces the goal when one is passed", () => {
+    const { sprint } = scrum.initProject("start-replaces-goal");
+    scrum.updateSprint(sprint.id, { goal: "Planned goal" });
+    const started = scrum.startSprint(sprint.id, "New goal");
+    expect(started.goal).toBe("New goal");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // List operations
 // ---------------------------------------------------------------------------
