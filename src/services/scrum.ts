@@ -1036,7 +1036,7 @@ export function getWorkPackage(projectId: number, capacity: number, agentId?: st
   const completedItemIds = new Set(completions.map((c) => c.dodItemId));
 
   const allDecisions = getDecisions(projectId);
-  const allLessons = getLessons(projectId);
+  const allLessons = getWorkPackageLessons(projectId);
   const LESSON_CAP = 10;
   const lessons = allLessons.length > LESSON_CAP ? allLessons.slice(-LESSON_CAP) : allLessons;
 
@@ -1207,4 +1207,19 @@ export function getLessons(projectId?: number): Lesson[] {
       .all() as Lesson[];
   }
   return db.select().from(schema.lessons).all() as Lesson[];
+}
+
+/**
+ * Lessons a work package should carry: the project's own lessons plus lessons
+ * logged without a project (cross-project), which used to be stored but never
+ * surfaced anywhere. Ordered oldest first so callers can cap to the newest.
+ */
+export function getWorkPackageLessons(projectId: number): Lesson[] {
+  const db = getDb();
+  return db
+    .select()
+    .from(schema.lessons)
+    .where(or(eq(schema.lessons.projectId, projectId), isNull(schema.lessons.projectId)))
+    .orderBy(schema.lessons.id)
+    .all() as Lesson[];
 }
