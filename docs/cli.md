@@ -62,7 +62,7 @@ scrum <project> sprint update <N> \
 scrum <project> sprint velocity                 # story points completed per sprint
 scrum <project> sprint velocity --tokens        # add token usage column + per-agent breakdown
 scrum <project> sprint create                   # next sprint, in planning
-scrum <project> sprint start <N> [--goal "..."] # planning -> active (no --goal clears the goal)
+scrum <project> sprint start <N> [--goal "..."] # planning -> active (no --goal keeps the existing goal)
 scrum <project> sprint close <N>                # active -> closed; then run retro
 
 # ── Status (current sprint summary) ─────────────────────────────────────
