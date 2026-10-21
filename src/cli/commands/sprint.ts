@@ -241,7 +241,7 @@ export function registerSprint(program: Command): void {
 
   sprint
     .command("start <sprint-number>")
-    .description("Move a sprint from planning to active (scrum_start_sprint). Without --goal, the goal is cleared.")
+    .description("Move a sprint from planning to active (scrum_start_sprint). Without --goal, the existing goal is kept.")
     .option("--goal <text>", "Sprint goal")
     .option("--json", "Output the sprint as JSON")
     .action((sprintNumber: string, opts: { goal?: string; json?: boolean }) => {
